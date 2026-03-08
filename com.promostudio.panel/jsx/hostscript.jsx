@@ -1266,8 +1266,9 @@ function detectTrackRole(track, trackIndex, totalTracks) {
     if (track.clips.numItems > 0) {
         var hasMOGRT = false;
         var hasVideo = false;
+        var hasImageOverlay = false;
 
-        for (var c = 0; c < track.clips.numItems && c < 3; c++) {
+        for (var c = 0; c < track.clips.numItems && c < 5; c++) {
             var clip = track.clips[c];
             try {
                 var mgComp = clip.getMGTComponent();
@@ -1279,15 +1280,28 @@ function detectTrackRole(track, trackIndex, totalTracks) {
             if (clipName.indexOf('logo') >= 0 || clipName.indexOf('watermark') >= 0) return TRACK_ROLES.OVERLAY;
             if (clipName.indexOf('lower') >= 0 || clipName.indexOf('l3') >= 0) return TRACK_ROLES.LOWER_THIRD;
 
+            // Detect overlay images: PNG files with aspect ratio hints in name (e.g., "Stage 16-9")
+            if (clipName.indexOf('.png') >= 0 || clipName.indexOf('stage') >= 0 ||
+                clipName.indexOf('wcf') >= 0 || clipName.indexOf('badge') >= 0 ||
+                clipName.indexOf('frame') >= 0 || clipName.indexOf('border') >= 0) {
+                hasImageOverlay = true;
+            }
+
+            // Detect aspect ratio patterns in clip name (e.g., "16-9", "16x9", "9-16")
+            if (/\d+-\d+/.test(clipName) || /\d+x\d+/.test(clipName)) {
+                hasImageOverlay = true;
+            }
+
             if (!mgComp) hasVideo = true;
         }
 
         if (hasMOGRT && !hasVideo) return TRACK_ROLES.TEXT;
+        if (hasImageOverlay && !hasVideo) return TRACK_ROLES.OVERLAY;
     }
 
     // Position-based heuristic: V1 = background, top tracks = overlays
     if (trackIndex === 0) return TRACK_ROLES.BACKGROUND;
-    if (trackIndex === totalTracks - 1 || trackIndex === totalTracks - 2) return TRACK_ROLES.OVERLAY;
+    if (trackIndex >= totalTracks - 2 && trackIndex > 0) return TRACK_ROLES.OVERLAY;
 
     return TRACK_ROLES.UNKNOWN;
 }
@@ -1473,8 +1487,14 @@ function adjustAllClipsSmartV2(seq, oldW, oldH, newW, newH, opts) {
             try {
                 var clip = track.clips[c];
 
+                // 0. Try to swap overlay assets with correct aspect ratio version
+                //    e.g., "Stage 16-9 WCF White.png" → "Stage 1-1 WCF White.png" for 1:1
+                if (role === TRACK_ROLES.OVERLAY) {
+                    trySwapOverlayAsset(clip, oldW, oldH, newW, newH);
+                }
+
                 // 1. Adjust Motion component (Position, Scale, Anchor Point, Rotation)
-                adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy);
+                adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy, newW, newH);
 
                 // 2. Adjust MOGRT / Essential Graphics text properties
                 if (opts.adjustMOGRT && (roleStrategy.adjustMOGRT || role === TRACK_ROLES.TEXT || role === TRACK_ROLES.LOWER_THIRD)) {
@@ -1493,10 +1513,127 @@ function adjustAllClipsSmartV2(seq, oldW, oldH, newW, newH, opts) {
 }
 
 /**
+ * Try to swap an overlay clip's source with the correct aspect ratio version.
+ * Looks for naming patterns like "16-9", "16x9", "1920x1080" in the clip name
+ * and finds a matching project item with the target aspect ratio.
+ *
+ * Example: "Stage 16-9 WCF White.png" → searches for "Stage 1-1 WCF White.png" (for 1:1)
+ *          "Stage 16-9 WCF White.png" → searches for "Stage 9-16 WCF White.png" (for 9:16)
+ */
+function trySwapOverlayAsset(clip, oldW, oldH, newW, newH) {
+    try {
+        var clipName = clip.name || '';
+        if (!clipName) return;
+
+        // Determine old and new aspect ratio strings
+        var oldAR = getAspectRatioString(oldW, oldH);
+        var newAR = getAspectRatioString(newW, newH);
+
+        if (!oldAR || !newAR || oldAR === newAR) return;
+
+        // Check if the clip name contains the old aspect ratio pattern
+        var patterns = getARPatterns(oldW, oldH);
+        var matchedPattern = null;
+        var clipNameLower = clipName.toLowerCase();
+
+        for (var i = 0; i < patterns.length; i++) {
+            if (clipNameLower.indexOf(patterns[i].toLowerCase()) >= 0) {
+                matchedPattern = patterns[i];
+                break;
+            }
+        }
+
+        if (!matchedPattern) return;
+
+        // Build the target name by replacing the old AR pattern with new AR patterns
+        var newPatterns = getARPatterns(newW, newH);
+        var proj = app.project;
+
+        // Try each new pattern to find a matching project item
+        for (var np = 0; np < newPatterns.length; np++) {
+            var targetName = clipName.replace(new RegExp(escapeRegExp(matchedPattern), 'i'), newPatterns[np]);
+
+            // Search project for the target item
+            var replacement = findProjectItemByName(proj.rootItem, targetName);
+            if (replacement) {
+                // Swap the clip's source (projectItem)
+                try {
+                    clip.projectItem = replacement;
+                } catch (e2) {
+                    // Some PPro versions don't allow direct projectItem assignment
+                    // Try replaceMedia if available
+                    try {
+                        if (typeof replacement.getMediaPath === 'function') {
+                            clip.projectItem.changeMediaPath(replacement.getMediaPath(), true);
+                        }
+                    } catch (e3) {}
+                }
+                return; // Successfully swapped
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Get common aspect ratio string representations for a given width/height
+ */
+function getAspectRatioString(w, h) {
+    var g = gcd(w, h);
+    return (w / g) + ':' + (h / g);
+}
+
+function getARPatterns(w, h) {
+    var g = gcd(w, h);
+    var rw = w / g;
+    var rh = h / g;
+    // Return common naming patterns: "16-9", "16x9", "16_9", "1920x1080"
+    return [
+        rw + '-' + rh,
+        rw + 'x' + rh,
+        rw + '_' + rh,
+        w + 'x' + h
+    ];
+}
+
+function gcd(a, b) {
+    a = Math.abs(a);
+    b = Math.abs(b);
+    while (b) {
+        var temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
+}
+
+function escapeRegExp(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Recursively search project for an item by exact name
+ */
+function findProjectItemByName(parentItem, targetName) {
+    for (var i = 0; i < parentItem.children.numItems; i++) {
+        var item = parentItem.children[i];
+        if (item.name === targetName) return item;
+        // Search inside bins
+        if (item.type === 2 && item.children && item.children.numItems > 0) {
+            var found = findProjectItemByName(item, targetName);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+/**
  * V2 Motion adjuster - handles Position, Scale, Anchor Point, and Rotation
  * with smart center-pin for narration clips and bottom-pin for lower thirds
+ *
+ * IMPORTANT: PPro Motion > Position is in PIXEL coordinates, NOT normalized 0-1.
+ * Center of 1920x1080 = (960, 540). Center of 1080x1080 = (540, 540).
  */
-function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy) {
+function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy, newW, newH) {
     if (!clip || !clip.components) return;
 
     for (var i = 0; i < clip.components.numItems; i++) {
@@ -1509,16 +1646,16 @@ function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrateg
 
             if (name === 'Position') {
                 if (roleStrategy.centerPin) {
-                    // Narration: center the clip in the new frame
-                    setCenterPosition(prop);
+                    // Narration/face: center the clip in the new frame (pixel coords)
+                    setCenterPosition(prop, newW, newH);
                 } else if (roleStrategy.pinBottom) {
-                    // Lower third: pin to bottom of frame
-                    adjustPositionPinBottom(prop, scaleX, scaleY);
+                    // Lower third: keep X centered, pin Y to bottom 80% of frame
+                    adjustPositionPinBottom(prop, scaleX, scaleY, newW, newH);
                 } else if (roleStrategy.preserveRelative) {
-                    // Overlay: preserve relative position (e.g., logo corner stays in corner)
-                    adjustPositionRelative(prop, scaleX, scaleY);
+                    // Overlay: remap position proportionally so corner logos stay in corners
+                    adjustPositionRelative(prop, scaleX, scaleY, newW, newH);
                 } else {
-                    // Default: proportional remap
+                    // Default: proportional pixel remap
                     adjustPositionProperty(prop, scaleX, scaleY);
                 }
             }
@@ -1530,77 +1667,85 @@ function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrateg
             if (name === 'Anchor Point') {
                 adjustAnchorPointProperty(prop, scaleX, scaleY);
             }
-
-            // Rotation doesn't need frame-size adjustment typically,
-            // but if Uniform Scale is off, we may need to handle it
         }
         break; // Only one Motion component per clip
     }
 }
 
 /**
- * Set position to center of frame (0.5, 0.5 in PPro normalized coords)
- * Used for narration/face clips that should be centered
+ * Set position to center of frame in PIXEL coordinates.
+ * PPro Position = pixels, so center of 1080x1080 = (540, 540).
  */
-function setCenterPosition(prop) {
+function setCenterPosition(prop, newW, newH) {
     try {
+        var centerX = newW / 2;
+        var centerY = newH / 2;
         if (prop.isTimeVarying()) {
-            // For keyframed narration, center all keyframes
             walkKeyframes(prop, function (val) {
                 if (val && val.length >= 2) {
-                    return [0.5, 0.5];
+                    return [centerX, centerY];
                 }
                 return val;
             });
         } else {
-            prop.setValue([0.5, 0.5], true);
+            prop.setValue([centerX, centerY], true);
         }
     } catch (e) {}
 }
 
 /**
- * Pin position to bottom of frame - keep X proportional, Y pinned low
- * Used for lower thirds
+ * Pin position to bottom of frame - keep X centered, Y at 80% of frame height.
+ * PPro Position is in PIXELS. Lower third at 80% of 1080px = Y=864.
  */
-function adjustPositionPinBottom(prop, scaleX, scaleY) {
+function adjustPositionPinBottom(prop, scaleX, scaleY, newW, newH) {
     try {
+        var centerX = newW / 2;
+        var bottomY = newH * 0.8; // 80% down the frame
         if (prop.isTimeVarying()) {
             walkKeyframes(prop, function (val) {
                 if (val && val.length >= 2) {
-                    // Keep relative X, but pin Y toward bottom (0.8-0.9 range)
-                    var newY = 0.5 + (val[1] - 0.5); // Preserve offset from center but in new frame
-                    if (newY < 0.7) newY = 0.8; // Force to lower region if it drifted up
-                    return [val[0], newY];
+                    // Remap X proportionally, pin Y to bottom region
+                    var remappedX = val[0] * scaleX;
+                    var remappedY = val[1] * scaleY;
+                    // If Y ended up above 70% of new frame, force to 80%
+                    if (remappedY < newH * 0.7) remappedY = bottomY;
+                    return [remappedX, remappedY];
                 }
                 return val;
             });
         } else {
             var pos = prop.getValue();
             if (pos && pos.length >= 2) {
-                var newY = pos[1];
-                if (newY < 0.7) newY = 0.8;
-                prop.setValue([pos[0], newY], true);
+                var remappedX = pos[0] * scaleX;
+                var remappedY = pos[1] * scaleY;
+                if (remappedY < newH * 0.7) remappedY = bottomY;
+                prop.setValue([remappedX, remappedY], true);
             }
         }
     } catch (e) {}
 }
 
 /**
- * Preserve relative position for overlays (logos in corners stay in corners)
+ * Preserve relative position for overlays (logos in corners stay in corners).
+ * PPro Position is in PIXELS. A logo at top-right (1800, 100) in 1920x1080
+ * should go to (1010, 100) in 1080x1080 to stay in the top-right area.
+ * We remap proportionally: newX = oldX * (newW/oldW), newY = oldY * (newH/oldH)
  */
-function adjustPositionRelative(prop, scaleX, scaleY) {
+function adjustPositionRelative(prop, scaleX, scaleY, newW, newH) {
     try {
         if (prop.isTimeVarying()) {
             walkKeyframes(prop, function (val) {
                 if (val && val.length >= 2) {
-                    // Keep the same normalized position (PPro uses 0-1 range)
-                    // No adjustment needed for normalized coords
-                    return val;
+                    return [val[0] * scaleX, val[1] * scaleY];
                 }
                 return val;
             });
+        } else {
+            var pos = prop.getValue();
+            if (pos && pos.length >= 2) {
+                prop.setValue([pos[0] * scaleX, pos[1] * scaleY], true);
+            }
         }
-        // Static values in normalized coords don't need adjustment
     } catch (e) {}
 }
 
