@@ -5,6 +5,15 @@ echo " macOS Installation Script"
 echo "============================================"
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Check if source folder exists
+if [ ! -d "$SCRIPT_DIR/com.promostudio.panel" ]; then
+    echo " ERROR: com.promostudio.panel folder not found!"
+    echo " Make sure you run this script from the Promo_Studio folder."
+    exit 1
+fi
+
 # Step 1: Enable unsigned extensions
 echo "[1/3] Enabling unsigned extensions..."
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1 2>/dev/null
@@ -18,8 +27,8 @@ TARGET_DIR="$HOME/Library/Application Support/Adobe/CEP/extensions/com.promostud
 echo ""
 echo "[2/3] Installing to: $TARGET_DIR"
 
-# Create parent directory if needed
-mkdir -p "$(dirname "$TARGET_DIR")"
+# Create all parent directories if needed
+mkdir -p "$HOME/Library/Application Support/Adobe/CEP/extensions"
 
 # Remove old installation
 if [ -d "$TARGET_DIR" ]; then
@@ -28,7 +37,6 @@ if [ -d "$TARGET_DIR" ]; then
 fi
 
 # Step 3: Copy extension files
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "   Copying extension files..."
 cp -R "$SCRIPT_DIR/com.promostudio.panel" "$TARGET_DIR"
 

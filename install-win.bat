@@ -5,6 +5,15 @@ echo  Windows Installation Script
 echo ============================================
 echo.
 
+:: Check if source folder exists
+if not exist "%~dp0com.promostudio.panel" (
+    echo  ERROR: com.promostudio.panel folder not found!
+    echo  Make sure you run this script from the Promo_Studio folder.
+    echo.
+    pause
+    exit /b 1
+)
+
 :: Step 1: Enable unsigned extensions (PlayerDebugMode)
 echo [1/3] Enabling unsigned extensions...
 
@@ -16,9 +25,15 @@ reg add "HKCU\Software\Adobe\CSXS.9" /v PlayerDebugMode /t REG_SZ /d 1 /f >nul 2
 echo    PlayerDebugMode set for CSXS 9-12
 
 :: Step 2: Create extensions directory if needed
-set TARGET_DIR=%APPDATA%\Adobe\CEP\extensions\com.promostudio.panel
+set EXTENSIONS_DIR=%APPDATA%\Adobe\CEP\extensions
+set TARGET_DIR=%EXTENSIONS_DIR%\com.promostudio.panel
 echo.
 echo [2/3] Installing to: %TARGET_DIR%
+
+:: Create parent directories if they don't exist
+if not exist "%APPDATA%\Adobe" mkdir "%APPDATA%\Adobe"
+if not exist "%APPDATA%\Adobe\CEP" mkdir "%APPDATA%\Adobe\CEP"
+if not exist "%EXTENSIONS_DIR%" mkdir "%EXTENSIONS_DIR%"
 
 if exist "%TARGET_DIR%" (
     echo    Removing old installation...
@@ -27,7 +42,7 @@ if exist "%TARGET_DIR%" (
 
 :: Step 3: Copy extension files
 echo    Copying extension files...
-xcopy /s /i /q "%~dp0com.promostudio.panel" "%TARGET_DIR%"
+xcopy /s /i /q "%~dp0com.promostudio.panel" "%TARGET_DIR%\"
 
 if %ERRORLEVEL% EQU 0 (
     echo.
