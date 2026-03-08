@@ -1201,6 +1201,43 @@ function tagAsset(itemIndex, tagName, tagValue) {
 // ============================================================
 
 /**
+ * Diagnostic: check if the JSX file loaded and core functions exist
+ */
+function jsxDiagnostic() {
+    try {
+        var checks = {
+            jsxLoaded: true,
+            hasProject: !!app.project,
+            hasActiveSeq: !!(app.project && app.project.activeSequence),
+            fnExists: {
+                createVersionsFromActive: typeof createVersionsFromActive === 'function',
+                adjustAllClipsSmartV2: typeof adjustAllClipsSmartV2 === 'function',
+                detectTrackRole: typeof detectTrackRole === 'function',
+                walkKeyframes: typeof walkKeyframes === 'function',
+                snapshotSequenceProperties: typeof snapshotSequenceProperties === 'function',
+                organizeVersionsIntoBin: typeof organizeVersionsIntoBin === 'function',
+                getActiveSequenceInfo: typeof getActiveSequenceInfo === 'function'
+            }
+        };
+        if (app.project && app.project.activeSequence) {
+            var seq = app.project.activeSequence;
+            checks.seqName = seq.name;
+            checks.seqSize = seq.frameSizeHorizontal + 'x' + seq.frameSizeVertical;
+            checks.videoTracks = seq.videoTracks.numTracks;
+            // Test if clone exists
+            checks.hasClone = typeof seq.clone === 'function';
+            // Test if getSettings exists
+            checks.hasGetSettings = typeof seq.getSettings === 'function';
+            // Test if openSequence exists
+            checks.hasOpenSequence = typeof app.project.openSequence === 'function';
+        }
+        return safeResult(checks);
+    } catch (e) {
+        return errorResult('Diagnostic failed: ' + e.toString());
+    }
+}
+
+/**
  * Track role constants - detected from track name, clip type, and position
  */
 var TRACK_ROLES = {

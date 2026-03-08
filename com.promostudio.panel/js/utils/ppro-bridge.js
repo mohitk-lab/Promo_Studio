@@ -41,9 +41,18 @@ var PPro = {
     /**
      * Execute a JSX function in Premiere Pro host
      */
+    /**
+     * Wrap script in try-catch at ExtendScript level to catch ALL errors
+     * including function-not-found and engine crashes
+     */
+    _wrapScript: function (script) {
+        return 'try{' + script + '}catch(___e){\'{"success":false,"error":"JSX: \'+String(___e)+\'"}\'}'
+    },
+
     call: function (fnName, args, callback) {
         var argsStr = this._serializeArg(args);
-        var script = fnName + '(' + argsStr + ')';
+        var rawScript = fnName + '(' + argsStr + ')';
+        var script = this._wrapScript(rawScript);
 
         csInterface.evalScript(script, function (result) {
             if (callback) {
@@ -61,7 +70,8 @@ var PPro = {
             parts.push(this._serializeArg(argsArray[i]));
         }
 
-        var script = fnName + '(' + parts.join(', ') + ')';
+        var rawScript = fnName + '(' + parts.join(', ') + ')';
+        var script = this._wrapScript(rawScript);
 
         csInterface.evalScript(script, function (result) {
             if (callback) {

@@ -194,6 +194,7 @@ var VersionCreator = (function () {
         // Main action button
         html += '<div class="version-actions">';
         html += '<button class="btn btn-primary btn-lg" id="btn-create-versions">Create All Versions</button>';
+        html += ' <button class="btn btn-sm btn-secondary" id="btn-jsx-diagnostic" title="Check if JSX loaded correctly">Diagnose</button>';
         html += '</div>';
 
         // Progress / log
@@ -287,6 +288,34 @@ var VersionCreator = (function () {
     }
 
     function bindVersionEvents(container) {
+
+        // Diagnostic button
+        container.querySelector('#btn-jsx-diagnostic').addEventListener('click', function () {
+            var logArea = container.querySelector('#version-log');
+            logArea.style.display = 'block';
+            logArea.innerHTML = '';
+            versionLog(logArea, 'Running JSX diagnostic...');
+
+            PPro.callAsync('jsxDiagnostic', null).then(function (d) {
+                versionLog(logArea, 'JSX loaded: ' + (d.jsxLoaded ? 'YES' : 'NO'));
+                versionLog(logArea, 'Project open: ' + (d.hasProject ? 'YES' : 'NO'));
+                versionLog(logArea, 'Active sequence: ' + (d.hasActiveSeq ? 'YES' : 'NO'));
+                if (d.seqName) versionLog(logArea, 'Sequence: ' + d.seqName + ' (' + d.seqSize + ')');
+                if (d.videoTracks) versionLog(logArea, 'Video tracks: ' + d.videoTracks);
+                if (d.fnExists) {
+                    for (var fn in d.fnExists) {
+                        versionLog(logArea, '  ' + fn + ': ' + (d.fnExists[fn] ? 'OK' : 'MISSING'));
+                    }
+                }
+                if (typeof d.hasClone !== 'undefined') versionLog(logArea, 'seq.clone(): ' + (d.hasClone ? 'OK' : 'MISSING'));
+                if (typeof d.hasGetSettings !== 'undefined') versionLog(logArea, 'seq.getSettings(): ' + (d.hasGetSettings ? 'OK' : 'MISSING'));
+                if (typeof d.hasOpenSequence !== 'undefined') versionLog(logArea, 'proj.openSequence(): ' + (d.hasOpenSequence ? 'OK' : 'MISSING'));
+                versionLog(logArea, 'Diagnostic complete.');
+            }).catch(function (err) {
+                versionLog(logArea, 'DIAGNOSTIC FAILED: ' + err);
+                versionLog(logArea, 'This means the JSX file did not load. Restart Premiere Pro.');
+            });
+        });
 
         // Create All Versions - main button
         container.querySelector('#btn-create-versions').addEventListener('click', function () {
