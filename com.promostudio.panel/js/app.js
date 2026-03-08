@@ -16,12 +16,23 @@
         try {
             var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
             var jsxPath = extPath + '/jsx/hostscript.jsx';
-            // Normalize path separators for ExtendScript
-            jsxPath = jsxPath.replace(/\\/g, '/');
-            var script = '$.evalFile("' + jsxPath + '")';
+            // Normalize ALL path separators for ExtendScript (Windows + Mac)
+            jsxPath = jsxPath.replace(/\\/g, '/').replace(/\/\//g, '/');
+            // Escape double quotes in path (rare but possible on some systems)
+            var escapedPath = jsxPath.replace(/"/g, '\\"');
+            var script = '$.evalFile("' + escapedPath + '")';
             csInterface.evalScript(script, function (result) {
-                if (result === 'EvalScript error.' || result === 'undefined') {
+                if (!result || result === 'EvalScript error.' || result === 'undefined' || result === 'null') {
                     console.error('[App] JSX reload failed: ' + result + ' | Path: ' + jsxPath);
+                    // Try alternative path construction
+                    var altScript = 'var f=new File("' + escapedPath + '");f.exists?$.evalFile(f):("File not found: "+f.fsName)';
+                    csInterface.evalScript(altScript, function (r2) {
+                        if (r2 && r2.indexOf('File not found') >= 0) {
+                            console.error('[App] JSX file not found at: ' + jsxPath);
+                        } else {
+                            console.log('[App] JSX reloaded via File object');
+                        }
+                    });
                 } else {
                     console.log('[App] JSX hostscript reloaded from disk');
                 }

@@ -2136,17 +2136,24 @@ function adjustPositionProperty(prop, scaleX, scaleY) {
 }
 
 /**
- * Adjust Scale property - multiply by fill/fit factor
+ * Adjust Scale property - multiply by fill/fit factor.
+ * Handles both single numeric (uniform scale) and array [x, y] (non-uniform).
  */
 function adjustScaleProperty(prop, scaleFactor) {
     try {
         if (prop.isTimeVarying()) {
             walkKeyframes(prop, function (val) {
-                return val * scaleFactor;
+                if (typeof val === 'number') return val * scaleFactor;
+                if (val && val.length >= 2) return [val[0] * scaleFactor, val[1] * scaleFactor];
+                return val;
             });
         } else {
             var scale = prop.getValue();
-            prop.setValue(scale * scaleFactor, true);
+            if (typeof scale === 'number') {
+                prop.setValue(scale * scaleFactor, true);
+            } else if (scale && scale.length >= 2) {
+                prop.setValue([scale[0] * scaleFactor, scale[1] * scaleFactor], true);
+            }
         }
     } catch (e) {}
 }
@@ -2273,6 +2280,8 @@ function compareSequenceSnapshots(seqName1, seqName2) {
             seq1: seqName1,
             seq2: seqName2,
             frameSizeDiff: (snap1.width !== snap2.width || snap1.height !== snap2.height),
+            seq1Size: snap1.width + 'x' + snap1.height,
+            seq2Size: snap2.width + 'x' + snap2.height,
             trackDiffs: []
         };
 
@@ -2305,39 +2314,64 @@ function compareSequenceSnapshots(seqName1, seqName2) {
                     continue;
                 }
 
-                // Compare Motion properties
+                // Compare Motion properties (symmetric - check both directions)
+                var motionChecked = {};
                 for (var key in c1.motion) {
-                    if (c2.motion[key]) {
-                        var v1 = jsonStringify(c1.motion[key].value);
-                        var v2 = jsonStringify(c2.motion[key].value);
-                        if (v1 !== v2) {
-                            diffs.trackDiffs.push({
-                                track: t,
-                                clip: c,
-                                clipName: c1.name,
-                                property: 'Motion.' + key,
-                                seq1Value: c1.motion[key].value,
-                                seq2Value: c2.motion[key].value
-                            });
-                        }
+                    motionChecked[key] = true;
+                    var v1 = jsonStringify(c1.motion[key].value);
+                    var v2 = c2.motion[key] ? jsonStringify(c2.motion[key].value) : '"MISSING"';
+                    if (v1 !== v2) {
+                        diffs.trackDiffs.push({
+                            track: t,
+                            clip: c,
+                            clipName: c1.name,
+                            property: 'Motion.' + key,
+                            seq1Value: c1.motion[key].value,
+                            seq2Value: c2.motion[key] ? c2.motion[key].value : 'MISSING'
+                        });
+                    }
+                }
+                // Check properties that exist in seq2 but not seq1
+                for (var key2 in c2.motion) {
+                    if (!motionChecked[key2]) {
+                        diffs.trackDiffs.push({
+                            track: t,
+                            clip: c,
+                            clipName: c1.name,
+                            property: 'Motion.' + key2,
+                            seq1Value: 'MISSING',
+                            seq2Value: c2.motion[key2].value
+                        });
                     }
                 }
 
-                // Compare MOGRT properties
+                // Compare MOGRT properties (symmetric)
+                var mogrtChecked = {};
                 for (var mkey in c1.mogrt) {
-                    if (c2.mogrt[mkey]) {
-                        var mv1 = jsonStringify(c1.mogrt[mkey]);
-                        var mv2 = jsonStringify(c2.mogrt[mkey]);
-                        if (mv1 !== mv2) {
-                            diffs.trackDiffs.push({
-                                track: t,
-                                clip: c,
-                                clipName: c1.name,
-                                property: 'MOGRT.' + mkey,
-                                seq1Value: c1.mogrt[mkey],
-                                seq2Value: c2.mogrt[mkey]
-                            });
-                        }
+                    mogrtChecked[mkey] = true;
+                    var mv1 = jsonStringify(c1.mogrt[mkey]);
+                    var mv2 = c2.mogrt[mkey] ? jsonStringify(c2.mogrt[mkey]) : '"MISSING"';
+                    if (mv1 !== mv2) {
+                        diffs.trackDiffs.push({
+                            track: t,
+                            clip: c,
+                            clipName: c1.name,
+                            property: 'MOGRT.' + mkey,
+                            seq1Value: c1.mogrt[mkey],
+                            seq2Value: c2.mogrt[mkey] || 'MISSING'
+                        });
+                    }
+                }
+                for (var mkey2 in c2.mogrt) {
+                    if (!mogrtChecked[mkey2]) {
+                        diffs.trackDiffs.push({
+                            track: t,
+                            clip: c,
+                            clipName: c1.name,
+                            property: 'MOGRT.' + mkey2,
+                            seq1Value: 'MISSING',
+                            seq2Value: c2.mogrt[mkey2]
+                        });
                     }
                 }
             }

@@ -418,14 +418,22 @@ var VersionCreator = (function () {
             if (!w) return;
             var h = prompt('Height:', '1080');
             if (!h) return;
-            var label = prompt('Label:', w + 'x' + h);
+
+            var pw = parseInt(w);
+            var ph = parseInt(h);
+            if (isNaN(pw) || isNaN(ph) || pw < 100 || ph < 100 || pw > 7680 || ph > 7680) {
+                showNotification('Invalid dimensions. Enter numbers between 100 and 7680.', 'error');
+                return;
+            }
+
+            var label = prompt('Label:', pw + 'x' + ph);
 
             var versions = getVersionConfigs();
             versions.push({
-                suffix: w + 'x' + h,
-                width: parseInt(w),
-                height: parseInt(h),
-                label: label || (w + 'x' + h)
+                suffix: pw + 'x' + ph,
+                width: pw,
+                height: ph,
+                label: label || (pw + 'x' + ph)
             });
             saveVersionConfigs(versions);
 
@@ -468,6 +476,9 @@ var VersionCreator = (function () {
                 }
                 var html = '<div class="compare-summary">';
                 html += '<strong>Differences Found: ' + d.totalDifferences + '</strong>';
+                if (d.frameSizeDiff) {
+                    html += '<div class="compare-framesize">Frame sizes differ: ' + d.seq1Size + ' vs ' + d.seq2Size + '</div>';
+                }
                 html += '</div>';
 
                 if (d.totalDifferences === 0) {

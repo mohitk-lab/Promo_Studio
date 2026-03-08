@@ -12,14 +12,17 @@ var PPro = {
     _eventListeners: {},
 
     /**
-     * Serialize a single argument for JSX
+     * Serialize a single argument for JSX.
+     * Escapes both single quotes AND backslashes to prevent injection.
      */
     _serializeArg: function (arg) {
         if (arg === undefined || arg === null) return '';
         if (typeof arg === 'object') {
-            return "'" + JSON.stringify(arg).replace(/'/g, "\\'") + "'";
+            var json = JSON.stringify(arg);
+            // Escape backslashes first, then single quotes
+            return "'" + json.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
         } else if (typeof arg === 'string') {
-            return "'" + arg.replace(/'/g, "\\'") + "'";
+            return "'" + arg.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
         }
         return String(arg);
     },
@@ -39,14 +42,16 @@ var PPro = {
     },
 
     /**
-     * Execute a JSX function in Premiere Pro host
-     */
-    /**
-     * Wrap script in try-catch at ExtendScript level to catch ALL errors
-     * including function-not-found and engine crashes
+     * Wrap script in try-catch at ExtendScript level to catch ALL errors.
+     * Uses errorResult() from hostscript.jsx which safely JSON-encodes the error.
+     * Falls back to simple string if errorResult doesn't exist (JSX not loaded).
      */
     _wrapScript: function (script) {
-        return 'try{' + script + '}catch(___e){\'{"success":false,"error":"JSX: \'+String(___e)+\'"}\'}'
+        return 'try{' + script +
+            '}catch(___e){' +
+            'typeof errorResult==="function"?errorResult("JSX: "+String(___e)):' +
+            '"{\\"success\\":false,\\"error\\":\\"JSX error\\"}"' +
+            '}';
     },
 
     call: function (fnName, args, callback) {
