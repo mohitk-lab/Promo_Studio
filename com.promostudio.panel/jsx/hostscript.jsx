@@ -1331,7 +1331,17 @@ function createVersionsFromActive(configJSON) {
             var newH = parseInt(ver.height);
 
             // Switch back to the main sequence before each clone
-            proj.openSequence(mainID);
+            try {
+                proj.openSequence(mainID);
+            } catch (eOpen) {
+                // Fallback: find and open sequence by iterating
+                for (var si = 0; si < proj.sequences.numSequences; si++) {
+                    if (proj.sequences[si].sequenceID === mainID) {
+                        proj.activeSequence = proj.sequences[si];
+                        break;
+                    }
+                }
+            }
 
             // Clone the active (main) sequence
             proj.activeSequence.clone();
@@ -1341,11 +1351,18 @@ function createVersionsFromActive(configJSON) {
             clone.name = mainName + '_' + ver.suffix;
 
             // Change frame size
-            var settings = clone.getSettings();
-            if (settings) {
-                settings.videoFrameWidth = newW;
-                settings.videoFrameHeight = newH;
-                clone.setSettings(settings);
+            try {
+                var settings = clone.getSettings();
+                if (settings) {
+                    settings.videoFrameWidth = newW;
+                    settings.videoFrameHeight = newH;
+                    clone.setSettings(settings);
+                }
+            } catch (eSettings) {
+                // Fallback: try sequence preset approach
+                try {
+                    clone.setPlayerPosition(clone.zeroPoint);
+                } catch (e2) {}
             }
 
             // Smart auto-adjust with track roles
@@ -1747,15 +1764,43 @@ function adjustGenericEffectPositions(comp, scaleX, scaleY) {
  */
 function walkKeyframes(prop, transformFn) {
     try {
-        var startTime = new Time();
-        startTime.seconds = 0;
-        var key = prop.findNearestKey(startTime, 0);
+        // Use getKeyframeCount / getKeyframeValue if available (PPro 14+)
+        if (typeof prop.getKeyframeCount === 'function') {
+            var count = prop.getKeyframeCount();
+            for (var k = 0; k < count; k++) {
+                try {
+                    var val = prop.getKeyframeValue(k);
+                    var newVal = transformFn(val);
+                    if (newVal !== undefined) {
+                        prop.setKeyframeValue(k, newVal);
+                    }
+                } catch (e2) {}
+            }
+            return;
+        }
+
+        // Fallback: iterate keyframes using findNearestKey
+        // Get a starting time reference from the property's first keyframe
+        var key = null;
+        try {
+            key = prop.findNearestKey(0, 0);
+        } catch (e3) {
+            try {
+                // Some PPro versions need a Time object - try creating one
+                var t = new Time();
+                t.seconds = 0;
+                key = prop.findNearestKey(t, 0);
+            } catch (e4) {}
+        }
+
+        if (!key) return;
+
         var processedTimes = [];
         var maxIterations = 500;
 
         while (key && maxIterations > 0) {
             maxIterations--;
-            var keyTimeStr = key.seconds.toString();
+            var keyTimeStr = String(key.seconds || key);
 
             var alreadyDone = false;
             for (var i = 0; i < processedTimes.length; i++) {
@@ -1764,17 +1809,27 @@ function walkKeyframes(prop, transformFn) {
             if (alreadyDone) break;
             processedTimes.push(keyTimeStr);
 
-            var val = prop.getValueAtKey(key);
-            var newVal = transformFn(val);
-            if (newVal !== undefined && newVal !== val) {
-                prop.setValueAtKey(key, newVal, true);
-            }
+            try {
+                var val = prop.getValueAtKey(key);
+                var newVal = transformFn(val);
+                if (newVal !== undefined && newVal !== val) {
+                    prop.setValueAtKey(key, newVal, true);
+                }
+            } catch (e5) {}
 
-            var nextTime = new Time();
-            nextTime.seconds = key.seconds + 0.001;
-            var nextKey = prop.findNearestKey(nextTime, 0);
+            // Find next keyframe
+            var nextKey = null;
+            try {
+                var nextSec = (key.seconds || 0) + 0.001;
+                nextKey = prop.findNearestKey(nextSec, 0);
+                if (!nextKey) {
+                    var nt = new Time();
+                    nt.seconds = nextSec;
+                    nextKey = prop.findNearestKey(nt, 0);
+                }
+            } catch (e6) {}
 
-            if (!nextKey || nextKey.seconds <= key.seconds) break;
+            if (!nextKey || (nextKey.seconds || 0) <= (key.seconds || 0)) break;
             key = nextKey;
         }
     } catch (e) {}

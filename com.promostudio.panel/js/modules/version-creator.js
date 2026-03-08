@@ -242,26 +242,21 @@ var VersionCreator = (function () {
     }
 
     function loadSequenceInfo() {
-        getActiveSequenceInfo().then(function (result) {
+        getActiveSequenceInfo().then(function (d) {
             var area = document.getElementById('version-seq-info');
             if (!area) return;
 
-            if (result && result.success) {
-                var d = result.data;
-                var html = '<div class="seq-info-card">';
-                html += '<div class="seq-info-main">';
-                html += '<strong>' + d.name + '</strong>';
-                html += '<span class="seq-dimensions">' + d.width + 'x' + d.height + '</span>';
-                html += '</div>';
-                html += '<div class="seq-info-details">';
-                html += '<span>Video Tracks: ' + d.videoTrackCount + '</span>';
-                html += '<span>Audio Tracks: ' + d.audioTrackCount + '</span>';
-                html += '</div>';
-                html += '</div>';
-                area.innerHTML = html;
-            } else {
-                area.innerHTML = '<p class="empty-state">No active sequence. Open a sequence in Premiere Pro first.</p>';
-            }
+            var html = '<div class="seq-info-card">';
+            html += '<div class="seq-info-main">';
+            html += '<strong>' + d.name + '</strong>';
+            html += '<span class="seq-dimensions">' + d.width + 'x' + d.height + '</span>';
+            html += '</div>';
+            html += '<div class="seq-info-details">';
+            html += '<span>Video Tracks: ' + d.videoTrackCount + '</span>';
+            html += '<span>Audio Tracks: ' + d.audioTrackCount + '</span>';
+            html += '</div>';
+            html += '</div>';
+            area.innerHTML = html;
         }).catch(function () {
             var area = document.getElementById('version-seq-info');
             if (area) area.innerHTML = '<p class="empty-state">Could not connect to Premiere Pro</p>';
@@ -269,11 +264,9 @@ var VersionCreator = (function () {
     }
 
     function loadTrackRoleOverrides(container, settings) {
-        getActiveSequenceInfo().then(function (result) {
+        getActiveSequenceInfo().then(function (d) {
             var area = container.querySelector('#track-role-overrides');
-            if (!area || !result || !result.success) return;
-
-            var d = result.data;
+            if (!area || !d) return;
             var overrides = settings.trackOverrides || {};
             var html = '';
 
@@ -351,38 +344,32 @@ var VersionCreator = (function () {
                 versionLog(logArea, 'Track role overrides: ' + overrideCount + ' tracks');
             }
 
-            createAllVersions(currentSettings).then(function (result) {
+            createAllVersions(currentSettings).then(function (d) {
                 btn.disabled = false;
                 btn.textContent = 'Create All Versions';
 
-                if (result && result.success) {
-                    var d = result.data;
-                    versionLog(logArea, 'Main sequence: ' + d.mainSequence.name + ' (' + d.mainSequence.width + 'x' + d.mainSequence.height + ')');
+                versionLog(logArea, 'Main sequence: ' + d.mainSequence.name + ' (' + d.mainSequence.width + 'x' + d.mainSequence.height + ')');
 
-                    if (d.trackRoles && d.trackRoles.length) {
-                        versionLog(logArea, 'Detected track roles:');
-                        for (var r = 0; r < d.trackRoles.length; r++) {
-                            versionLog(logArea, '  V' + (r + 1) + ': ' + d.trackRoles[r]);
-                        }
+                if (d.trackRoles && d.trackRoles.length) {
+                    versionLog(logArea, 'Detected track roles:');
+                    for (var r = 0; r < d.trackRoles.length; r++) {
+                        versionLog(logArea, '  V' + (r + 1) + ': ' + d.trackRoles[r]);
                     }
-
-                    for (var i = 0; i < d.versions.length; i++) {
-                        versionLog(logArea, 'Created: ' + d.versions[i].name + ' (' + d.versions[i].width + 'x' + d.versions[i].height + ')');
-                    }
-
-                    if (d.bin) {
-                        versionLog(logArea, 'Organized into: ' + d.bin.bin + (d.bin.subBin ? '/' + d.bin.subBin : '') + ' (' + d.bin.movedCount + ' items)');
-                    }
-
-                    versionLog(logArea, 'All versions created successfully!');
-                    showNotification('Versions created! Check "' + currentSettings.binName + '" bin.', 'success');
-
-                    loadBinContents(container, currentSettings.binName);
-                    loadSequenceInfo();
-                } else {
-                    versionLog(logArea, 'Error: ' + (result ? result.error : 'Unknown error'));
-                    showNotification('Error: ' + (result ? result.error : 'Unknown error'), 'error');
                 }
+
+                for (var i = 0; i < d.versions.length; i++) {
+                    versionLog(logArea, 'Created: ' + d.versions[i].name + ' (' + d.versions[i].width + 'x' + d.versions[i].height + ')');
+                }
+
+                if (d.bin) {
+                    versionLog(logArea, 'Organized into: ' + d.bin.bin + (d.bin.subBin ? '/' + d.bin.subBin : '') + ' (' + d.bin.movedCount + ' items)');
+                }
+
+                versionLog(logArea, 'All versions created successfully!');
+                showNotification('Versions created! Check "' + currentSettings.binName + '" bin.', 'success');
+
+                loadBinContents(container, currentSettings.binName);
+                loadSequenceInfo();
             }).catch(function (err) {
                 btn.disabled = false;
                 btn.textContent = 'Create All Versions';
@@ -440,13 +427,11 @@ var VersionCreator = (function () {
             resultsArea.style.display = 'block';
             resultsArea.innerHTML = '<p class="empty-state">Comparing sequences...</p>';
 
-            compareSequences(manualName, aiName).then(function (result) {
-                if (!result || !result.success) {
-                    resultsArea.innerHTML = '<p class="empty-state">Error: ' + (result ? result.error : 'Unknown') + '</p>';
+            compareSequences(manualName, aiName).then(function (d) {
+                if (!d) {
+                    resultsArea.innerHTML = '<p class="empty-state">No data returned</p>';
                     return;
                 }
-
-                var d = result.data;
                 var html = '<div class="compare-summary">';
                 html += '<strong>Differences Found: ' + d.totalDifferences + '</strong>';
                 html += '</div>';
@@ -513,13 +498,12 @@ var VersionCreator = (function () {
 
         area.innerHTML = '<p class="empty-state">Scanning...</p>';
 
-        scanAllRenderBin(binName).then(function (result) {
-            if (!result || !result.success) {
+        scanAllRenderBin(binName).then(function (d) {
+            if (!d) {
                 area.innerHTML = '<p class="empty-state">Could not scan bin</p>';
                 return;
             }
 
-            var d = result.data;
             if (!d.exists) {
                 area.innerHTML = '<p class="empty-state">"' + binName + '" bin not found. It will be created when you create versions.</p>';
                 return;
