@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Promo Studio</title>
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- Header -->
+        <div class="app-header">
+            <div class="app-header-left">
+                <h1>Promo Studio</h1>
+                <span class="version">v1.0.0</span>
+            </div>
+            <div class="theme-toggle">
+                <span class="theme-toggle-label" id="theme-icon">&#9788;</span>
+                <label class="theme-switch">
+                    <input type="checkbox" id="theme-switch">
+                    <span class="theme-switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="versions">Versions</button>
+            <button class="nav-tab" data-tab="overview">Overview</button>
+            <button class="nav-tab" data-tab="templates">Templates</button>
+            <button class="nav-tab" data-tab="export">Export</button>
+            <button class="nav-tab" data-tab="scheduler">Scheduler</button>
+            <button class="nav-tab" data-tab="brandkit">Brand Kit</button>
+            <button class="nav-tab" data-tab="rules">Rules</button>
+            <button class="nav-tab" data-tab="assets">Assets</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+            <div id="panel-versions" class="tab-panel active"></div>
+            <div id="panel-overview" class="tab-panel"></div>
+            <div id="panel-templates" class="tab-panel"></div>
+            <div id="panel-export" class="tab-panel"></div>
+            <div id="panel-scheduler" class="tab-panel"></div>
+            <div id="panel-brandkit" class="tab-panel"></div>
+            <div id="panel-rules" class="tab-panel"></div>
+            <div id="panel-assets" class="tab-panel"></div>
+        </div>
+
+    </div>
+
+    <!-- Notification container -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Scripts: Load order matters -->
+    <script src="./js/utils/CSInterface.js"></script>
+    <script src="./js/utils/storage.js"></script>
+    <script src="./js/utils/ppro-bridge.js"></script>
+    <script src="./js/utils/error-handler.js"></script>
+    <script src="./js/utils/file-picker.js"></script>
+    <script src="./js/utils/preset-manager.js"></script>
+    <script src="./js/utils/mogrt-loader.js"></script>
+
+    <!-- Feature Modules -->
+    <script src="./js/modules/template-generator.js"></script>
+    <script src="./js/modules/multi-export.js"></script>
+    <script src="./js/modules/campaign-scheduler.js"></script>
+    <script src="./js/modules/brand-kit.js"></script>
+    <script src="./js/modules/rules-engine.js"></script>
+    <script src="./js/modules/asset-library.js"></script>
+    <script src="./js/modules/version-creator.js"></script>
+
+    <!-- Main App Controller -->
+    <script src="./js/app.js"></script>
+</body>
+</html>
