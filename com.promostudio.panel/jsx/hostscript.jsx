@@ -1214,6 +1214,8 @@ function jsxDiagnostic() {
                 adjustAllClipsSmartV2: typeof adjustAllClipsSmartV2 === 'function',
                 detectTrackRole: typeof detectTrackRole === 'function',
                 walkKeyframes: typeof walkKeyframes === 'function',
+                trySwapOverlayAsset: typeof trySwapOverlayAsset === 'function',
+                changeSequenceFrameSize: typeof changeSequenceFrameSize === 'function',
                 snapshotSequenceProperties: typeof snapshotSequenceProperties === 'function',
                 organizeVersionsIntoBin: typeof organizeVersionsIntoBin === 'function',
                 getActiveSequenceInfo: typeof getActiveSequenceInfo === 'function'
@@ -1351,6 +1353,9 @@ function createVersionsFromActive(configJSON) {
         var mainSeq = proj.activeSequence;
         if (!mainSeq) return errorResult('No active sequence - open a sequence first');
 
+        // Wrap everything in an undo group so user can Ctrl+Z to undo all at once
+        beginUndoGroup('Create Versions - Promo Studio');
+
         var mainName = mainSeq.name;
         var mainID = mainSeq.sequenceID;
         var oldWidth = parseInt(mainSeq.frameSizeHorizontal);
@@ -1382,42 +1387,43 @@ function createVersionsFromActive(configJSON) {
             var newH = parseInt(ver.height);
 
             // Switch back to the main sequence before each clone
-            try {
-                proj.openSequence(mainID);
-            } catch (eOpen) {
-                // Fallback: find and open sequence by iterating
-                for (var si = 0; si < proj.sequences.numSequences; si++) {
-                    if (proj.sequences[si].sequenceID === mainID) {
-                        proj.activeSequence = proj.sequences[si];
-                        break;
-                    }
-                }
-            }
+            switchToSequence(proj, mainID);
 
             // Clone the active (main) sequence
-            proj.activeSequence.clone();
+            var cloned = false;
+            try {
+                proj.activeSequence.clone();
+                cloned = true;
+            } catch (eClone) {
+                // Fallback for PPro versions without clone()
+                // Use QE DOM if available
+                try {
+                    var qe = qe || app.enableQE();
+                    if (qe) {
+                        var qeSeq = qe.project.getActiveSequence();
+                        qeSeq.clone();
+                        cloned = true;
+                    }
+                } catch (eQE) {}
+            }
+
+            if (!cloned) {
+                return errorResult('Could not clone sequence. Your PPro version may not support seq.clone(). Try updating Premiere Pro.');
+            }
 
             // The clone is now active
             var clone = proj.activeSequence;
             clone.name = mainName + '_' + ver.suffix;
 
-            // Change frame size
-            try {
-                var settings = clone.getSettings();
-                if (settings) {
-                    settings.videoFrameWidth = newW;
-                    settings.videoFrameHeight = newH;
-                    clone.setSettings(settings);
-                }
-            } catch (eSettings) {
-                // Fallback: try sequence preset approach
-                try {
-                    clone.setPlayerPosition(clone.zeroPoint);
-                } catch (e2) {}
-            }
+            // Change frame size using multiple fallback strategies
+            var sizeChanged = changeSequenceFrameSize(clone, newW, newH);
+
+            // Verify the frame size actually changed
+            var actualW = parseInt(clone.frameSizeHorizontal);
+            var actualH = parseInt(clone.frameSizeVertical);
 
             // Smart auto-adjust with track roles
-            if (config.autoAdjust !== false) {
+            if (config.autoAdjust !== false && sizeChanged) {
                 var adjustOpts = {
                     fitMode: config.fitMode || 'fill',
                     smartRoles: config.smartRoles !== false,
@@ -1431,14 +1437,15 @@ function createVersionsFromActive(configJSON) {
             createdVersions.push({
                 name: clone.name,
                 id: clone.sequenceID,
-                width: newW,
-                height: newH,
+                width: actualW,
+                height: actualH,
+                sizeChanged: sizeChanged,
                 trackRoles: trackRoles
             });
         }
 
         // Switch back to the main sequence
-        proj.openSequence(mainID);
+        switchToSequence(proj, mainID);
 
         // Organize into bin
         var binResult = null;
@@ -1458,6 +1465,65 @@ function createVersionsFromActive(configJSON) {
     } catch (e) {
         return errorResult(e.toString());
     }
+}
+
+/**
+ * Switch to a sequence by ID with fallback
+ */
+function switchToSequence(proj, seqID) {
+    try {
+        proj.openSequence(seqID);
+    } catch (eOpen) {
+        for (var si = 0; si < proj.sequences.numSequences; si++) {
+            if (proj.sequences[si].sequenceID === seqID) {
+                proj.activeSequence = proj.sequences[si];
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * Change sequence frame size with multiple fallback strategies:
+ * 1. getSettings/setSettings (PPro 14+)
+ * 2. QE DOM (PPro 12+)
+ * 3. Sequence preset (older PPro)
+ */
+function changeSequenceFrameSize(seq, newW, newH) {
+    // Strategy 1: getSettings/setSettings (PPro 14+, most reliable)
+    try {
+        var settings = seq.getSettings();
+        if (settings) {
+            settings.videoFrameWidth = newW;
+            settings.videoFrameHeight = newH;
+            seq.setSettings(settings);
+            // Verify
+            if (parseInt(seq.frameSizeHorizontal) === newW && parseInt(seq.frameSizeVertical) === newH) {
+                return true;
+            }
+        }
+    } catch (e1) {}
+
+    // Strategy 2: QE DOM approach (PPro 12+)
+    try {
+        var qe2 = app.enableQE();
+        if (qe2) {
+            var qeSeq2 = qe2.project.getActiveSequence();
+            qeSeq2.setFrameSize(newW, newH);
+            if (parseInt(seq.frameSizeHorizontal) === newW && parseInt(seq.frameSizeVertical) === newH) {
+                return true;
+            }
+        }
+    } catch (e2) {}
+
+    // Strategy 3: Direct property set (may work in some versions)
+    try {
+        seq.frameSizeHorizontal = newW;
+        seq.frameSizeVertical = newH;
+        if (parseInt(seq.frameSizeHorizontal) === newW) return true;
+    } catch (e3) {}
+
+    return false;
 }
 
 /**
@@ -1662,6 +1728,14 @@ function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrateg
 
             if (name === 'Scale') {
                 adjustScaleProperty(prop, scaleFactor);
+            }
+
+            // Handle non-uniform scale (when "Uniform Scale" is unchecked)
+            if (name === 'Scale Width') {
+                adjustScaleProperty(prop, scaleX);
+            }
+            if (name === 'Scale Height') {
+                adjustScaleProperty(prop, scaleY);
             }
 
             if (name === 'Anchor Point') {
@@ -2032,11 +2106,12 @@ function adjustAllClipMotion(seq, oldW, oldH, newW, newH, fitMode) {
 
 /**
  * Adjust a single clip's Motion component properties (legacy compat)
+ * NOTE: newW/newH default to 1080x1080 if not provided (for backwards compat)
  */
-function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor) {
+function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor, newW, newH) {
     adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, {
         fitMode: 'fill', centerPin: false, pinBottom: false
-    });
+    }, newW || 1080, newH || 1080);
 }
 
 /**

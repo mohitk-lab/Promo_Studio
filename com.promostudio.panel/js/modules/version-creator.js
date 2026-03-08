@@ -81,7 +81,8 @@ var VersionCreator = (function () {
             trackOverrides: (options && options.trackOverrides) || settings.trackOverrides || {}
         };
 
-        return PPro.callAsync('createVersionsFromActive', JSON.stringify(config));
+        // 120s timeout - version creation can take a while for many versions
+        return PPro.callAsync('createVersionsFromActive', JSON.stringify(config), 120000);
     }
 
     function getActiveSequenceInfo() {
@@ -387,7 +388,11 @@ var VersionCreator = (function () {
                 }
 
                 for (var i = 0; i < d.versions.length; i++) {
-                    versionLog(logArea, 'Created: ' + d.versions[i].name + ' (' + d.versions[i].width + 'x' + d.versions[i].height + ')');
+                    var vInfo = d.versions[i];
+                    versionLog(logArea, 'Created: ' + vInfo.name + ' (' + vInfo.width + 'x' + vInfo.height + ')');
+                    if (vInfo.sizeChanged === false) {
+                        versionLog(logArea, '  WARNING: Frame size did not change! Your PPro version may not support automated frame size changes. Manually change via Sequence > Sequence Settings.');
+                    }
                 }
 
                 if (d.bin) {
@@ -475,10 +480,10 @@ var VersionCreator = (function () {
 
                         if (diff.diff === 'track_missing') {
                             html += '<span class="diff-label">Track V' + (diff.track + 1) + '</span>';
-                            html += '<span class="diff-type">Missing in ' + diff.in + '</span>';
+                            html += '<span class="diff-type">Missing in ' + diff.presentIn + '</span>';
                         } else if (diff.diff === 'clip_missing') {
                             html += '<span class="diff-label">V' + (diff.track + 1) + ' Clip ' + diff.clip + '</span>';
-                            html += '<span class="diff-type">Missing in ' + diff.in + '</span>';
+                            html += '<span class="diff-type">Missing in ' + diff.presentIn + '</span>';
                         } else {
                             html += '<span class="diff-label">V' + (diff.track + 1) + ' "' + (diff.clipName || '') + '"</span>';
                             html += '<span class="diff-prop">' + diff.property + '</span>';
