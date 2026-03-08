@@ -24,6 +24,23 @@
         ErrorHandler.initGlobalHandler();
         ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Promo Studio initialized');
 
+        // Initialize PPro event listeners
+        PPro.initEventListeners();
+
+        // Auto-refresh dashboard when project or sequence changes
+        PPro.on('projectChanged', function () {
+            ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Project changed - refreshing');
+            if (currentTab === 'overview') renderOverview();
+        });
+        PPro.on('sequenceChanged', function () {
+            ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Active sequence changed');
+            if (currentTab === 'overview') renderOverview();
+        });
+        PPro.on('itemAdded', function () {
+            ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Media imported');
+            if (currentTab === 'assets') modules.assets.renderUI(document.getElementById('panel-assets'));
+        });
+
         // Initialize dark mode toggle
         initThemeToggle();
 

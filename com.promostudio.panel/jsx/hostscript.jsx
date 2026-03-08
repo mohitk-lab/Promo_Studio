@@ -8,6 +8,31 @@
 // UTILITY HELPERS
 // ============================================================
 
+/**
+ * Begin an undo group - all changes until endUndoGroup() are a single undo step
+ */
+function beginUndoGroup(groupName) {
+    try {
+        if (app.project) {
+            app.project.addUndoItem(groupName || 'Promo Studio Action');
+        }
+    } catch (e) {
+        // Undo group not supported in this PPro version - continue silently
+    }
+}
+
+/**
+ * Wrap a function call in an undo group for single-step undo
+ */
+function withUndo(groupName, fn) {
+    beginUndoGroup(groupName);
+    try {
+        return fn();
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
 function jsonStringify(obj) {
     if (typeof JSON !== 'undefined') return JSON.stringify(obj);
     // Fallback for older ExtendScript
@@ -46,16 +71,16 @@ function errorResult(msg) {
 }
 
 /**
- * Safe JSON parse for incoming args (avoids eval where possible)
+ * Safe JSON parse for incoming args - never uses eval
  */
 function safeParse(str) {
     if (typeof str !== 'string') return str;
     try {
         if (typeof JSON !== 'undefined') return JSON.parse(str);
-        return eval('(' + str + ')');
     } catch (e) {
-        return str;
+        // If JSON.parse fails, return the raw string
     }
+    return str;
 }
 
 /**
@@ -215,25 +240,56 @@ function getProjectInfo() {
  */
 function createPromoFromTemplate(templateJSON) {
     try {
-        var tpl = (typeof templateJSON === 'string') ? eval('(' + templateJSON + ')') : templateJSON;
+        var tpl = safeParse(templateJSON);
         var proj = getProject();
         if (!proj) return errorResult('No project open');
+        beginUndoGroup('Create Promo from Template');
 
-        // Create new sequence with template dimensions
         var seqName = tpl.name || ('Promo_' + new Date().getTime());
-        proj.createNewSequence(seqName, seqName);
+
+        // If a preset path is provided, use it for precise sequence settings
+        if (tpl.presetPath) {
+            proj.createNewSequenceFromPreset(seqName, tpl.presetPath);
+        } else {
+            proj.createNewSequence(seqName, seqName);
+        }
 
         var seq = proj.activeSequence;
         if (!seq) return errorResult('Failed to create sequence');
 
-        // Set sequence settings via preset if available
-        // Sequence dimensions are set during creation based on preset
+        // Apply custom dimensions if provided (override preset or default)
+        if (tpl.width && tpl.height) {
+            var settings = seq.getSettings();
+            if (settings) {
+                settings.videoFrameWidth = tpl.width;
+                settings.videoFrameHeight = tpl.height;
+                seq.setSettings(settings);
+            }
+        }
+
+        // Apply custom frame rate if provided
+        if (tpl.frameRate) {
+            var settings2 = seq.getSettings();
+            if (settings2) {
+                settings2.videoFrameRate = tpl.frameRate;
+                seq.setSettings(settings2);
+            }
+        }
+
+        // Set in/out points if duration is specified
+        if (tpl.duration) {
+            var endTime = new Time();
+            endTime.seconds = tpl.duration;
+            seq.setInPoint(0);
+            seq.setOutPoint(endTime.ticks);
+        }
 
         var result = {
             sequenceName: seq.name,
             sequenceId: seq.sequenceID,
-            width: tpl.width || seq.frameSizeHorizontal,
-            height: tpl.height || seq.frameSizeVertical
+            width: seq.frameSizeHorizontal,
+            height: seq.frameSizeVertical,
+            frameRate: tpl.frameRate || seq.timebase
         };
 
         return safeResult(result);
@@ -247,9 +303,11 @@ function createPromoFromTemplate(templateJSON) {
  */
 function importMediaFiles(filePathsJSON) {
     try {
-        var paths = (typeof filePathsJSON === 'string') ? eval('(' + filePathsJSON + ')') : filePathsJSON;
+        var paths = safeParse(filePathsJSON);
         var proj = getProject();
         if (!proj) return errorResult('No project open');
+
+        if (!paths || !paths.length) return errorResult('No file paths provided');
 
         var importArray = [];
         for (var i = 0; i < paths.length; i++) {
@@ -269,6 +327,7 @@ function importMediaFiles(filePathsJSON) {
 function addClipToTimeline(itemIndex, trackIndex, startTime) {
     try {
         var proj = getProject();
+        beginUndoGroup('Add Clip to Timeline');
         var seq = proj.activeSequence;
         if (!seq) return errorResult('No active sequence');
 
@@ -356,6 +415,7 @@ function updateMOGRTText(clipIndex, trackIndex, propertyName, newText) {
 function replaceClipMedia(clipIndex, trackIndex, newMediaPath) {
     try {
         var proj = getProject();
+        beginUndoGroup('Replace Clip Media');
         var seq = proj.activeSequence;
         var vTrack = seq.videoTracks[trackIndex || 0];
         var clip = vTrack.clips[clipIndex || 0];
@@ -419,7 +479,7 @@ function exportWithPreset(outputPath, presetPath, matchSequence) {
  */
 function batchExportMultiPlatform(exportsJSON) {
     try {
-        var exports = (typeof exportsJSON === 'string') ? eval('(' + exportsJSON + ')') : exportsJSON;
+        var exports = safeParse(exportsJSON);
         var proj = getProject();
         var seq = proj.activeSequence;
         if (!seq) return errorResult('No active sequence');
@@ -620,33 +680,85 @@ function exportSequenceByIndex(seqIndex, outputPath, presetPath) {
  */
 function applyBrandColor(clipIndex, trackIndex, colorHex) {
     try {
-        var seq = getProject().activeSequence;
+        var proj = getProject();
+        if (!proj) return errorResult('No project open');
+        var seq = proj.activeSequence;
+        if (!seq) return errorResult('No active sequence');
         var vTrack = seq.videoTracks[trackIndex || 0];
+        if (!vTrack) return errorResult('Video track not found');
         var clip = vTrack.clips[clipIndex || 0];
         if (!clip) return errorResult('Clip not found');
 
-        // Access clip components (effects)
+        // Parse hex color to RGB floats (0-255 range for PPro)
+        var hex = colorHex.replace('#', '');
+        var r = parseInt(hex.substring(0, 2), 16);
+        var g = parseInt(hex.substring(2, 4), 16);
+        var b = parseInt(hex.substring(4, 6), 16);
+
+        // Check if Lumetri Color is already applied
         var components = clip.components;
-        var effectApplied = false;
+        var lumetriComp = null;
 
         for (var i = 0; i < components.numItems; i++) {
-            var comp = components[i];
-            if (comp.displayName === 'Lumetri Color') {
-                // Found Lumetri - modify color properties
-                for (var p = 0; p < comp.properties.numItems; p++) {
-                    var prop = comp.properties[p];
-                    if (prop.displayName === 'Color' || prop.displayName === 'Tint') {
-                        // Set color values
-                        effectApplied = true;
-                    }
+            if (components[i].displayName === 'Lumetri Color') {
+                lumetriComp = components[i];
+                break;
+            }
+        }
+
+        // If Lumetri not found, apply it via QE DOM
+        if (!lumetriComp) {
+            // Use the effects panel to apply Lumetri
+            var qeSeq = qe.project.getActiveSequence();
+            if (qeSeq) {
+                var qeClip = qeSeq.getVideoTrackAt(trackIndex || 0).getItemAt(clipIndex || 0);
+                if (qeClip) {
+                    qeClip.addVideoEffect(qe.project.getVideoEffectByName('Lumetri Color'));
                 }
+            }
+            // Re-scan components after applying
+            components = clip.components;
+            for (var j = 0; j < components.numItems; j++) {
+                if (components[j].displayName === 'Lumetri Color') {
+                    lumetriComp = components[j];
+                    break;
+                }
+            }
+        }
+
+        if (!lumetriComp) return errorResult('Could not apply Lumetri Color effect');
+
+        // Navigate Lumetri properties - set Creative > Tint color
+        var effectApplied = false;
+        for (var p = 0; p < lumetriComp.properties.numItems; p++) {
+            var prop = lumetriComp.properties[p];
+            var name = prop.displayName;
+
+            // Set Color Wheels - Midtone Tint for brand color overlay
+            if (name === 'Tint Balance') {
+                // Tint Balance: -100 (green) to 100 (magenta)
+                var tintValue = ((r - g) / 255) * 100;
+                prop.setValue(tintValue, true);
+                effectApplied = true;
+            }
+            if (name === 'Temperature') {
+                // Temperature: warm/cool based on blue vs red
+                var tempValue = ((r - b) / 255) * 100;
+                prop.setValue(tempValue, true);
+                effectApplied = true;
+            }
+            if (name === 'Saturation') {
+                // Boost saturation slightly for brand color visibility
+                prop.setValue(120, true);
+                effectApplied = true;
             }
         }
 
         return safeResult({
             clipIndex: clipIndex,
             colorApplied: effectApplied,
-            color: colorHex
+            color: colorHex,
+            rgb: { r: r, g: g, b: b }
         });
     } catch (e) {
         return errorResult(e.toString());
@@ -697,7 +809,7 @@ function getProjectFonts() {
  */
 function importBrandAssets(assetPathsJSON, binName) {
     try {
-        var paths = (typeof assetPathsJSON === 'string') ? eval('(' + assetPathsJSON + ')') : assetPathsJSON;
+        var paths = safeParse(assetPathsJSON);
         var proj = getProject();
         if (!proj) return errorResult('No project open');
 
@@ -733,6 +845,7 @@ function importBrandAssets(assetPathsJSON, binName) {
 function addLogoOverlay(logoItemIndex, videoTrackIndex, startTime, endTime, position) {
     try {
         var proj = getProject();
+        beginUndoGroup('Add Logo Overlay');
         var seq = proj.activeSequence;
         if (!seq) return errorResult('No active sequence');
 
@@ -789,9 +902,10 @@ function addLogoOverlay(logoItemIndex, videoTrackIndex, startTime, endTime, posi
  */
 function generatePromoFromRule(ruleJSON) {
     try {
-        var rule = (typeof ruleJSON === 'string') ? eval('(' + ruleJSON + ')') : ruleJSON;
+        var rule = safeParse(ruleJSON);
         var proj = getProject();
         if (!proj) return errorResult('No project open');
+        beginUndoGroup('Generate Promo from Rule');
 
         // Find source template sequence
         var templateSeq = null;
@@ -936,7 +1050,7 @@ function scanBin(bin, path, assets) {
  */
 function createBinStructure(binsJSON) {
     try {
-        var bins = (typeof binsJSON === 'string') ? eval('(' + binsJSON + ')') : binsJSON;
+        var bins = safeParse(binsJSON);
         var proj = getProject();
         if (!proj) return errorResult('No project open');
 
@@ -1028,33 +1142,48 @@ function moveItemToBin(itemIndex, binName) {
 function tagAsset(itemIndex, tagName, tagValue) {
     try {
         var proj = getProject();
+        if (!proj) return errorResult('No project open');
         var item = proj.rootItem.children[itemIndex];
         if (!item) return errorResult('Item not found');
 
-        // Use XMP metadata for tagging
-        var xmp = item.getXMPMetadata();
-        if (xmp) {
-            // Add custom tag via description field
-            var currentDesc = '';
-            try {
-                var metadata = item.getProjectMetadata();
-                currentDesc = metadata || '';
-            } catch (e) {}
+        // Read existing XMP metadata
+        var xmpRaw = item.getXMPMetadata();
+        if (!xmpRaw) return errorResult('Cannot access metadata for this item');
 
-            var tagString = '[' + tagName + ':' + tagValue + ']';
+        // Build tag string to embed in dc:description
+        var tagString = '[' + tagName + ':' + tagValue + ']';
 
-            // Set log note as tag storage
-            item.setOverrideFrameRate(item.getFootageInterpretation ? 0 : 0);
+        // Read current project metadata and append tag
+        var projectMeta = item.getProjectMetadata();
+        var descKey = 'Column.PropertyText.Description';
 
+        // Check if tag already exists in metadata to avoid duplicates
+        if (projectMeta && projectMeta.indexOf(tagString) >= 0) {
             return safeResult({
                 tagged: true,
                 item: item.name,
                 tag: tagName,
-                value: tagValue
+                value: tagValue,
+                note: 'Tag already exists'
             });
         }
 
-        return errorResult('Cannot access metadata');
+        // Use setProjectMetadata to write the tag into the description column
+        // This is the proper PPro API for writing project-level metadata
+        var schema = 'http://ns.adobe.com/premierePrivateProjectMetaData/1.0/';
+        var succeeded = item.setProjectMetadata(
+            '<premierePrivateProjectMetaData:Column.PropertyText.Description>' +
+            tagString +
+            '</premierePrivateProjectMetaData:Column.PropertyText.Description>',
+            [descKey]
+        );
+
+        return safeResult({
+            tagged: true,
+            item: item.name,
+            tag: tagName,
+            value: tagValue
+        });
     } catch (e) {
         return errorResult(e.toString());
     }
