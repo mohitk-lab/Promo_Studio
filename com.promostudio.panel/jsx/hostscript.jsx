@@ -1190,20 +1190,105 @@ function tagAsset(itemIndex, tagName, tagValue) {
 }
 
 // ============================================================
-// 7. VERSION CREATOR - One-Click Multi-Version Automation
+// 7. VERSION CREATOR - Smart Multi-Version Automation
+// ============================================================
+// Learning from manual bin editing patterns:
+// - Per-track role detection (background, narration, overlay, text, lower-third)
+// - MOGRT / Essential Graphics text position adjustment
+// - Anchor Point, Rotation, Crop, Drop Shadow adjustment
+// - Smart center-pin for narration/face clips
+// - Bin comparison/snapshot system for learning manual vs AI differences
 // ============================================================
 
 /**
+ * Track role constants - detected from track name, clip type, and position
+ */
+var TRACK_ROLES = {
+    BACKGROUND: 'background',   // V1 typically, full-frame footage/color
+    NARRATION: 'narration',     // Face/talking head clips (detected by name or track)
+    OVERLAY: 'overlay',         // Logos, watermarks, small overlays
+    TEXT: 'text',               // Essential Graphics, MOGRTs, text layers
+    LOWER_THIRD: 'lower_third', // Lower third graphics (bottom 30%)
+    UNKNOWN: 'unknown'
+};
+
+/**
+ * Detect the role of a track based on its name, clip content, and position
+ */
+function detectTrackRole(track, trackIndex, totalTracks) {
+    var trackName = track.name ? track.name.toLowerCase() : '';
+
+    // Check track name hints
+    if (trackName.indexOf('bg') >= 0 || trackName.indexOf('background') >= 0) return TRACK_ROLES.BACKGROUND;
+    if (trackName.indexOf('narr') >= 0 || trackName.indexOf('face') >= 0 || trackName.indexOf('cam') >= 0 || trackName.indexOf('selfnarr') >= 0) return TRACK_ROLES.NARRATION;
+    if (trackName.indexOf('overlay') >= 0 || trackName.indexOf('logo') >= 0 || trackName.indexOf('watermark') >= 0) return TRACK_ROLES.OVERLAY;
+    if (trackName.indexOf('text') >= 0 || trackName.indexOf('title') >= 0 || trackName.indexOf('caption') >= 0) return TRACK_ROLES.TEXT;
+    if (trackName.indexOf('lower') >= 0 || trackName.indexOf('l3') >= 0 || trackName.indexOf('lt') >= 0) return TRACK_ROLES.LOWER_THIRD;
+
+    // Scan clip content for hints
+    if (track.clips.numItems > 0) {
+        var hasMOGRT = false;
+        var hasVideo = false;
+
+        for (var c = 0; c < track.clips.numItems && c < 3; c++) {
+            var clip = track.clips[c];
+            try {
+                var mgComp = clip.getMGTComponent();
+                if (mgComp) hasMOGRT = true;
+            } catch (e) {}
+
+            var clipName = clip.name ? clip.name.toLowerCase() : '';
+            if (clipName.indexOf('narr') >= 0 || clipName.indexOf('selfnarr') >= 0 || clipName.indexOf('face') >= 0 || clipName.indexOf('cam') >= 0) return TRACK_ROLES.NARRATION;
+            if (clipName.indexOf('logo') >= 0 || clipName.indexOf('watermark') >= 0) return TRACK_ROLES.OVERLAY;
+            if (clipName.indexOf('lower') >= 0 || clipName.indexOf('l3') >= 0) return TRACK_ROLES.LOWER_THIRD;
+
+            if (!mgComp) hasVideo = true;
+        }
+
+        if (hasMOGRT && !hasVideo) return TRACK_ROLES.TEXT;
+    }
+
+    // Position-based heuristic: V1 = background, top tracks = overlays
+    if (trackIndex === 0) return TRACK_ROLES.BACKGROUND;
+    if (trackIndex === totalTracks - 1 || trackIndex === totalTracks - 2) return TRACK_ROLES.OVERLAY;
+
+    return TRACK_ROLES.UNKNOWN;
+}
+
+/**
+ * Get fit mode and strategy for a specific track role
+ */
+function getFitModeForRole(role, globalFitMode) {
+    switch (role) {
+        case TRACK_ROLES.BACKGROUND:
+            return { fitMode: 'fill', centerPin: false, pinBottom: false };
+        case TRACK_ROLES.NARRATION:
+            return { fitMode: 'fill', centerPin: true, pinBottom: false };
+        case TRACK_ROLES.TEXT:
+            return { fitMode: 'fit', centerPin: false, pinBottom: false, adjustMOGRT: true };
+        case TRACK_ROLES.LOWER_THIRD:
+            return { fitMode: 'fit', centerPin: false, pinBottom: true, adjustMOGRT: true };
+        case TRACK_ROLES.OVERLAY:
+            return { fitMode: 'none', centerPin: false, pinBottom: false, preserveRelative: true };
+        default:
+            return { fitMode: globalFitMode || 'fill', centerPin: false, pinBottom: false };
+    }
+}
+
+/**
  * Create multiple size versions from the active sequence.
- * Clones the sequence for each version, adjusts frame size,
- * auto-adjusts clip motion (scale/position), and organizes into a bin.
+ * Smart version with track role detection, MOGRT adjustment, and per-track fit modes.
  *
  * configJSON = {
  *   versions: [ { suffix: '1080x1080', width: 1080, height: 1080 }, ... ],
  *   binName: 'All Render',
  *   createSubBin: true,
  *   autoAdjust: true,
- *   fitMode: 'fill'  // 'fill' | 'fit' | 'none'
+ *   fitMode: 'fill',       // global fallback: 'fill' | 'fit' | 'none'
+ *   smartRoles: true,       // enable per-track role detection
+ *   adjustMOGRT: true,      // adjust MOGRT/Essential Graphics text positions
+ *   adjustEffects: true,    // adjust Crop, Drop Shadow, etc.
+ *   trackOverrides: {}      // optional: { trackIndex: 'role' } manual overrides
  * }
  */
 function createVersionsFromActive(configJSON) {
@@ -1224,6 +1309,19 @@ function createVersionsFromActive(configJSON) {
             { suffix: '1080x1080', width: 1080, height: 1080 },
             { suffix: '1080x1920', width: 1080, height: 1920 }
         ];
+
+        // Detect track roles from the main sequence before cloning
+        var trackRoles = [];
+        var totalVideoTracks = mainSeq.videoTracks.numTracks;
+        for (var tr = 0; tr < totalVideoTracks; tr++) {
+            var role = TRACK_ROLES.UNKNOWN;
+            if (config.trackOverrides && config.trackOverrides[String(tr)]) {
+                role = config.trackOverrides[String(tr)];
+            } else if (config.smartRoles !== false) {
+                role = detectTrackRole(mainSeq.videoTracks[tr], tr, totalVideoTracks);
+            }
+            trackRoles.push(role);
+        }
 
         var createdVersions = [];
 
@@ -1250,17 +1348,24 @@ function createVersionsFromActive(configJSON) {
                 clone.setSettings(settings);
             }
 
-            // Auto-adjust clip motion properties (position, scale)
+            // Smart auto-adjust with track roles
             if (config.autoAdjust !== false) {
-                var fitMode = config.fitMode || 'fill';
-                adjustAllClipMotion(clone, oldWidth, oldHeight, newW, newH, fitMode);
+                var adjustOpts = {
+                    fitMode: config.fitMode || 'fill',
+                    smartRoles: config.smartRoles !== false,
+                    adjustMOGRT: config.adjustMOGRT !== false,
+                    adjustEffects: config.adjustEffects !== false,
+                    trackRoles: trackRoles
+                };
+                adjustAllClipsSmartV2(clone, oldWidth, oldHeight, newW, newH, adjustOpts);
             }
 
             createdVersions.push({
                 name: clone.name,
                 id: clone.sequenceID,
                 width: newW,
-                height: newH
+                height: newH,
+                trackRoles: trackRoles
             });
         }
 
@@ -1279,6 +1384,7 @@ function createVersionsFromActive(configJSON) {
         return safeResult({
             mainSequence: { name: mainName, width: oldWidth, height: oldHeight },
             versions: createdVersions,
+            trackRoles: trackRoles,
             bin: binResult
         });
     } catch (e) {
@@ -1287,40 +1393,56 @@ function createVersionsFromActive(configJSON) {
 }
 
 /**
- * Adjust motion (position, scale) on all video track clips
- * when sequence frame size changes.
+ * Smart V2 adjuster - handles all video tracks with role-aware fit modes
+ * Adjusts Motion, MOGRT properties, Crop, Drop Shadow, and more
  */
-function adjustAllClipMotion(seq, oldW, oldH, newW, newH, fitMode) {
+function adjustAllClipsSmartV2(seq, oldW, oldH, newW, newH, opts) {
     var scaleX = newW / oldW;
     var scaleY = newH / oldH;
 
-    // fill = cover the frame (no black bars), fit = show everything (may have bars)
-    var scaleFactor;
-    if (fitMode === 'fill') {
-        scaleFactor = Math.max(scaleX, scaleY);
-    } else if (fitMode === 'fit') {
-        scaleFactor = Math.min(scaleX, scaleY);
-    } else {
-        scaleFactor = 1; // none - don't adjust scale
-    }
-
     for (var t = 0; t < seq.videoTracks.numTracks; t++) {
         var track = seq.videoTracks[t];
+        var role = (opts.trackRoles && opts.trackRoles[t]) || TRACK_ROLES.UNKNOWN;
+        var roleStrategy = getFitModeForRole(role, opts.fitMode);
+
+        // Calculate scale factor for this track's role
+        var scaleFactor;
+        if (roleStrategy.fitMode === 'fill') {
+            scaleFactor = Math.max(scaleX, scaleY);
+        } else if (roleStrategy.fitMode === 'fit') {
+            scaleFactor = Math.min(scaleX, scaleY);
+        } else {
+            scaleFactor = 1;
+        }
+
         for (var c = 0; c < track.clips.numItems; c++) {
             try {
-                adjustSingleClipMotion(track.clips[c], scaleX, scaleY, scaleFactor);
+                var clip = track.clips[c];
+
+                // 1. Adjust Motion component (Position, Scale, Anchor Point, Rotation)
+                adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy);
+
+                // 2. Adjust MOGRT / Essential Graphics text properties
+                if (opts.adjustMOGRT && (roleStrategy.adjustMOGRT || role === TRACK_ROLES.TEXT || role === TRACK_ROLES.LOWER_THIRD)) {
+                    adjustMOGRTProperties(clip, scaleX, scaleY, oldW, oldH, newW, newH, roleStrategy);
+                }
+
+                // 3. Adjust position-based effects (Crop, Drop Shadow, etc.)
+                if (opts.adjustEffects) {
+                    adjustPositionBasedEffects(clip, scaleX, scaleY, oldW, oldH, newW, newH);
+                }
             } catch (e) {
-                // Skip clips that can't be adjusted (e.g., adjustment layers)
+                // Skip clips that can't be adjusted
             }
         }
     }
 }
 
 /**
- * Adjust a single clip's Motion component properties.
- * Handles both static values and keyframed properties.
+ * V2 Motion adjuster - handles Position, Scale, Anchor Point, and Rotation
+ * with smart center-pin for narration clips and bottom-pin for lower thirds
  */
-function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor) {
+function adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, roleStrategy) {
     if (!clip || !clip.components) return;
 
     for (var i = 0; i < clip.components.numItems; i++) {
@@ -1329,109 +1451,304 @@ function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor) {
 
         for (var p = 0; p < comp.properties.numItems; p++) {
             var prop = comp.properties[p];
+            var name = prop.displayName;
 
-            if (prop.displayName === 'Position') {
-                adjustPositionProperty(prop, scaleX, scaleY);
+            if (name === 'Position') {
+                if (roleStrategy.centerPin) {
+                    // Narration: center the clip in the new frame
+                    setCenterPosition(prop);
+                } else if (roleStrategy.pinBottom) {
+                    // Lower third: pin to bottom of frame
+                    adjustPositionPinBottom(prop, scaleX, scaleY);
+                } else if (roleStrategy.preserveRelative) {
+                    // Overlay: preserve relative position (e.g., logo corner stays in corner)
+                    adjustPositionRelative(prop, scaleX, scaleY);
+                } else {
+                    // Default: proportional remap
+                    adjustPositionProperty(prop, scaleX, scaleY);
+                }
             }
 
-            if (prop.displayName === 'Scale') {
+            if (name === 'Scale') {
                 adjustScaleProperty(prop, scaleFactor);
             }
+
+            if (name === 'Anchor Point') {
+                adjustAnchorPointProperty(prop, scaleX, scaleY);
+            }
+
+            // Rotation doesn't need frame-size adjustment typically,
+            // but if Uniform Scale is off, we may need to handle it
         }
         break; // Only one Motion component per clip
     }
 }
 
 /**
- * Adjust Position property - remap X/Y proportionally to new frame
+ * Set position to center of frame (0.5, 0.5 in PPro normalized coords)
+ * Used for narration/face clips that should be centered
  */
-function adjustPositionProperty(prop, scaleX, scaleY) {
+function setCenterPosition(prop) {
     try {
         if (prop.isTimeVarying()) {
-            // Keyframed position - adjust each keyframe
-            adjustKeyframedPosition(prop, scaleX, scaleY);
+            // For keyframed narration, center all keyframes
+            walkKeyframes(prop, function (val) {
+                if (val && val.length >= 2) {
+                    return [0.5, 0.5];
+                }
+                return val;
+            });
+        } else {
+            prop.setValue([0.5, 0.5], true);
+        }
+    } catch (e) {}
+}
+
+/**
+ * Pin position to bottom of frame - keep X proportional, Y pinned low
+ * Used for lower thirds
+ */
+function adjustPositionPinBottom(prop, scaleX, scaleY) {
+    try {
+        if (prop.isTimeVarying()) {
+            walkKeyframes(prop, function (val) {
+                if (val && val.length >= 2) {
+                    // Keep relative X, but pin Y toward bottom (0.8-0.9 range)
+                    var newY = 0.5 + (val[1] - 0.5); // Preserve offset from center but in new frame
+                    if (newY < 0.7) newY = 0.8; // Force to lower region if it drifted up
+                    return [val[0], newY];
+                }
+                return val;
+            });
         } else {
             var pos = prop.getValue();
             if (pos && pos.length >= 2) {
-                prop.setValue([pos[0] * scaleX, pos[1] * scaleY], true);
+                var newY = pos[1];
+                if (newY < 0.7) newY = 0.8;
+                prop.setValue([pos[0], newY], true);
             }
         }
-    } catch (e) {
-        // Silently skip if property can't be adjusted
-    }
+    } catch (e) {}
 }
 
 /**
- * Adjust Scale property - multiply by fill/fit factor
+ * Preserve relative position for overlays (logos in corners stay in corners)
  */
-function adjustScaleProperty(prop, scaleFactor) {
+function adjustPositionRelative(prop, scaleX, scaleY) {
     try {
         if (prop.isTimeVarying()) {
-            adjustKeyframedScale(prop, scaleFactor);
+            walkKeyframes(prop, function (val) {
+                if (val && val.length >= 2) {
+                    // Keep the same normalized position (PPro uses 0-1 range)
+                    // No adjustment needed for normalized coords
+                    return val;
+                }
+                return val;
+            });
+        }
+        // Static values in normalized coords don't need adjustment
+    } catch (e) {}
+}
+
+/**
+ * Adjust Anchor Point property
+ */
+function adjustAnchorPointProperty(prop, scaleX, scaleY) {
+    try {
+        if (prop.isTimeVarying()) {
+            walkKeyframes(prop, function (val) {
+                if (val && val.length >= 2) {
+                    return [val[0] * scaleX, val[1] * scaleY];
+                }
+                return val;
+            });
         } else {
-            var scale = prop.getValue();
-            prop.setValue(scale * scaleFactor, true);
-        }
-    } catch (e) {
-        // Silently skip
-    }
-}
-
-/**
- * Adjust keyframed Position values.
- * Iterates through the sequence timeline and adjusts keyframe values.
- */
-function adjustKeyframedPosition(prop, scaleX, scaleY) {
-    try {
-        // Use findNearestKey to walk through keyframes
-        // Start from time 0, find nearest key, adjust, move forward
-        var startTime = new Time();
-        startTime.seconds = 0;
-
-        // Get the first key
-        var key = prop.findNearestKey(startTime, 0);
-        var processedTimes = [];
-        var maxIterations = 500; // Safety limit
-
-        while (key && maxIterations > 0) {
-            maxIterations--;
-            var keyTimeStr = key.seconds.toString();
-
-            // Avoid processing same key twice
-            var alreadyDone = false;
-            for (var i = 0; i < processedTimes.length; i++) {
-                if (processedTimes[i] === keyTimeStr) { alreadyDone = true; break; }
-            }
-            if (alreadyDone) break;
-            processedTimes.push(keyTimeStr);
-
-            var val = prop.getValueAtKey(key);
+            var val = prop.getValue();
             if (val && val.length >= 2) {
-                prop.setValueAtKey(key, [val[0] * scaleX, val[1] * scaleY], true);
+                prop.setValue([val[0] * scaleX, val[1] * scaleY], true);
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Adjust MOGRT / Essential Graphics text properties
+ * MOGRTs have their own position/scale properties separate from Motion
+ */
+function adjustMOGRTProperties(clip, scaleX, scaleY, oldW, oldH, newW, newH, roleStrategy) {
+    try {
+        var mgComp = clip.getMGTComponent();
+        if (!mgComp) return;
+
+        for (var p = 0; p < mgComp.properties.numItems; p++) {
+            var prop = mgComp.properties[p];
+            var name = prop.displayName ? prop.displayName.toLowerCase() : '';
+
+            // Adjust position-like properties in MOGRT
+            if (name.indexOf('position') >= 0 || name.indexOf('location') >= 0 || name.indexOf('offset') >= 0) {
+                try {
+                    var val = prop.getValue();
+                    if (val && typeof val === 'object' && val.length >= 2) {
+                        if (roleStrategy.pinBottom) {
+                            // Lower third MOGRT: keep X, pin Y to bottom region
+                            var yVal = val[1];
+                            // If position is in pixel space, remap to new frame
+                            if (Math.abs(val[0]) > 1 || Math.abs(val[1]) > 1) {
+                                prop.setValue([val[0] * scaleX, newH * 0.8], true);
+                            } else {
+                                // Normalized space
+                                if (yVal < 0.7) yVal = 0.8;
+                                prop.setValue([val[0], yVal], true);
+                            }
+                        } else {
+                            // Standard position remap
+                            if (Math.abs(val[0]) > 1 || Math.abs(val[1]) > 1) {
+                                // Pixel-space position
+                                prop.setValue([val[0] * scaleX, val[1] * scaleY], true);
+                            }
+                            // Normalized positions stay the same
+                        }
+                    }
+                } catch (e) {}
             }
 
-            // Move slightly past current key to find next
-            var nextTime = new Time();
-            nextTime.seconds = key.seconds + 0.001;
-            var nextKey = prop.findNearestKey(nextTime, 0);
+            // Adjust scale-like properties in MOGRT
+            if (name.indexOf('scale') >= 0 || name.indexOf('size') >= 0) {
+                try {
+                    var sVal = prop.getValue();
+                    if (typeof sVal === 'number' && sVal > 0) {
+                        var mogrtScaleFactor = Math.min(scaleX, scaleY); // fit text within frame
+                        prop.setValue(sVal * mogrtScaleFactor, true);
+                    }
+                } catch (e) {}
+            }
 
-            // If we got the same key back, we're done
-            if (!nextKey || nextKey.seconds <= key.seconds) break;
-            key = nextKey;
+            // Adjust font size if it seems pixel-based
+            if (name.indexOf('font size') >= 0 || name === 'fontsize' || name === 'text size') {
+                try {
+                    var fontSize = prop.getValue();
+                    if (typeof fontSize === 'number' && fontSize > 5) {
+                        var fontScaleFactor = Math.min(scaleX, scaleY);
+                        prop.setValue(Math.round(fontSize * fontScaleFactor), true);
+                    }
+                } catch (e) {}
+            }
         }
     } catch (e) {
-        // Keyframe adjustment failed - user can adjust manually
+        // MOGRT adjustment failed - clip may not be a MOGRT
     }
 }
 
 /**
- * Adjust keyframed Scale values.
+ * Adjust position-based effects: Crop, Drop Shadow, Gaussian Blur offset, etc.
  */
-function adjustKeyframedScale(prop, scaleFactor) {
+function adjustPositionBasedEffects(clip, scaleX, scaleY, oldW, oldH, newW, newH) {
+    if (!clip || !clip.components) return;
+
+    for (var i = 0; i < clip.components.numItems; i++) {
+        var comp = clip.components[i];
+        var compName = comp.displayName ? comp.displayName : '';
+
+        // Adjust Crop effect
+        if (compName === 'Crop') {
+            adjustCropEffect(comp, scaleX, scaleY, oldW, oldH, newW, newH);
+        }
+
+        // Adjust Drop Shadow
+        if (compName === 'Drop Shadow') {
+            adjustDropShadowEffect(comp, scaleX, scaleY);
+        }
+
+        // Adjust any effect with Position/Offset properties
+        if (compName !== 'Motion' && compName !== 'Opacity') {
+            adjustGenericEffectPositions(comp, scaleX, scaleY);
+        }
+    }
+}
+
+/**
+ * Adjust Crop effect percentages for new frame dimensions
+ * Crop values are percentages (0-100) so aspect ratio changes need recalculation
+ */
+function adjustCropEffect(comp, scaleX, scaleY, oldW, oldH, newW, newH) {
+    try {
+        for (var p = 0; p < comp.properties.numItems; p++) {
+            var prop = comp.properties[p];
+            var name = prop.displayName;
+
+            // Crop Left/Right are horizontal - adjust based on aspect ratio change
+            if (name === 'Left' || name === 'Right') {
+                var hVal = prop.getValue();
+                if (typeof hVal === 'number' && hVal > 0) {
+                    // Convert crop % to pixels in old frame, then back to % in new frame
+                    var oldPixels = (hVal / 100) * oldW;
+                    var newPercent = (oldPixels / newW) * 100;
+                    prop.setValue(Math.min(newPercent, 100), true);
+                }
+            }
+
+            // Crop Top/Bottom are vertical
+            if (name === 'Top' || name === 'Bottom') {
+                var vVal = prop.getValue();
+                if (typeof vVal === 'number' && vVal > 0) {
+                    var oldPixelsV = (vVal / 100) * oldH;
+                    var newPercentV = (oldPixelsV / newH) * 100;
+                    prop.setValue(Math.min(newPercentV, 100), true);
+                }
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Adjust Drop Shadow distance/offset for new frame dimensions
+ */
+function adjustDropShadowEffect(comp, scaleX, scaleY) {
+    try {
+        for (var p = 0; p < comp.properties.numItems; p++) {
+            var prop = comp.properties[p];
+            var name = prop.displayName;
+
+            if (name === 'Distance' || name === 'Softness') {
+                var val = prop.getValue();
+                if (typeof val === 'number') {
+                    var avgScale = (scaleX + scaleY) / 2;
+                    prop.setValue(val * avgScale, true);
+                }
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Adjust position/offset properties in generic effects
+ */
+function adjustGenericEffectPositions(comp, scaleX, scaleY) {
+    try {
+        for (var p = 0; p < comp.properties.numItems; p++) {
+            var prop = comp.properties[p];
+            var name = prop.displayName ? prop.displayName.toLowerCase() : '';
+
+            // Only adjust obvious position/offset properties
+            if (name === 'center' || name === 'point of interest' || name === 'offset') {
+                try {
+                    var val = prop.getValue();
+                    if (val && typeof val === 'object' && val.length >= 2) {
+                        prop.setValue([val[0] * scaleX, val[1] * scaleY], true);
+                    }
+                } catch (e) {}
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Generic keyframe walker - iterates all keyframes and applies a transform function
+ */
+function walkKeyframes(prop, transformFn) {
     try {
         var startTime = new Time();
         startTime.seconds = 0;
-
         var key = prop.findNearestKey(startTime, 0);
         var processedTimes = [];
         var maxIterations = 500;
@@ -1448,7 +1765,10 @@ function adjustKeyframedScale(prop, scaleFactor) {
             processedTimes.push(keyTimeStr);
 
             var val = prop.getValueAtKey(key);
-            prop.setValueAtKey(key, val * scaleFactor, true);
+            var newVal = transformFn(val);
+            if (newVal !== undefined && newVal !== val) {
+                prop.setValueAtKey(key, newVal, true);
+            }
 
             var nextTime = new Time();
             nextTime.seconds = key.seconds + 0.001;
@@ -1457,8 +1777,264 @@ function adjustKeyframedScale(prop, scaleFactor) {
             if (!nextKey || nextKey.seconds <= key.seconds) break;
             key = nextKey;
         }
+    } catch (e) {}
+}
+
+/**
+ * Adjust motion (position, scale) on all video track clips (legacy compat)
+ */
+function adjustAllClipMotion(seq, oldW, oldH, newW, newH, fitMode) {
+    adjustAllClipsSmartV2(seq, oldW, oldH, newW, newH, {
+        fitMode: fitMode,
+        smartRoles: true,
+        adjustMOGRT: true,
+        adjustEffects: true,
+        trackRoles: []
+    });
+}
+
+/**
+ * Adjust a single clip's Motion component properties (legacy compat)
+ */
+function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor) {
+    adjustSingleClipMotionV2(clip, scaleX, scaleY, scaleFactor, {
+        fitMode: 'fill', centerPin: false, pinBottom: false
+    });
+}
+
+/**
+ * Adjust Position property - remap X/Y proportionally to new frame
+ */
+function adjustPositionProperty(prop, scaleX, scaleY) {
+    try {
+        if (prop.isTimeVarying()) {
+            walkKeyframes(prop, function (val) {
+                if (val && val.length >= 2) {
+                    return [val[0] * scaleX, val[1] * scaleY];
+                }
+                return val;
+            });
+        } else {
+            var pos = prop.getValue();
+            if (pos && pos.length >= 2) {
+                prop.setValue([pos[0] * scaleX, pos[1] * scaleY], true);
+            }
+        }
+    } catch (e) {}
+}
+
+/**
+ * Adjust Scale property - multiply by fill/fit factor
+ */
+function adjustScaleProperty(prop, scaleFactor) {
+    try {
+        if (prop.isTimeVarying()) {
+            walkKeyframes(prop, function (val) {
+                return val * scaleFactor;
+            });
+        } else {
+            var scale = prop.getValue();
+            prop.setValue(scale * scaleFactor, true);
+        }
+    } catch (e) {}
+}
+
+// ============================================================
+// BIN COMPARISON / LEARNING SYSTEM
+// Snapshots clip properties from two bins and returns differences
+// so the user can teach the AI what manual edits look like
+// ============================================================
+
+/**
+ * Snapshot all clip properties from a sequence (for bin comparison)
+ * Returns detailed property map per track per clip
+ */
+function snapshotSequenceProperties(seqName) {
+    try {
+        var proj = getProject();
+        if (!proj) return errorResult('No project open');
+
+        // Find sequence by name
+        var seq = null;
+        for (var i = 0; i < proj.sequences.numSequences; i++) {
+            if (proj.sequences[i].name === seqName) {
+                seq = proj.sequences[i];
+                break;
+            }
+        }
+        if (!seq) return errorResult('Sequence not found: ' + seqName);
+
+        var snapshot = {
+            name: seq.name,
+            width: parseInt(seq.frameSizeHorizontal),
+            height: parseInt(seq.frameSizeVertical),
+            tracks: []
+        };
+
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var track = seq.videoTracks[t];
+            var trackData = {
+                index: t,
+                name: track.name || ('V' + (t + 1)),
+                clips: []
+            };
+
+            for (var c = 0; c < track.clips.numItems; c++) {
+                var clip = track.clips[c];
+                var clipData = {
+                    index: c,
+                    name: clip.name,
+                    startTime: clip.start ? clip.start.seconds : 0,
+                    endTime: clip.end ? clip.end.seconds : 0,
+                    motion: {},
+                    mogrt: {},
+                    effects: []
+                };
+
+                // Capture Motion properties
+                for (var ci = 0; ci < clip.components.numItems; ci++) {
+                    var comp = clip.components[ci];
+
+                    if (comp.displayName === 'Motion') {
+                        for (var p = 0; p < comp.properties.numItems; p++) {
+                            var prop = comp.properties[p];
+                            try {
+                                clipData.motion[prop.displayName] = {
+                                    value: prop.getValue(),
+                                    keyframed: prop.isTimeVarying()
+                                };
+                            } catch (e) {}
+                        }
+                    } else if (comp.displayName !== 'Opacity') {
+                        // Capture effect properties
+                        var effectData = { name: comp.displayName, props: {} };
+                        for (var ep = 0; ep < comp.properties.numItems; ep++) {
+                            try {
+                                effectData.props[comp.properties[ep].displayName] = comp.properties[ep].getValue();
+                            } catch (e) {}
+                        }
+                        clipData.effects.push(effectData);
+                    }
+                }
+
+                // Capture MOGRT properties
+                try {
+                    var mgComp = clip.getMGTComponent();
+                    if (mgComp) {
+                        for (var mp = 0; mp < mgComp.properties.numItems; mp++) {
+                            try {
+                                clipData.mogrt[mgComp.properties[mp].displayName] = mgComp.properties[mp].getValue();
+                            } catch (e) {}
+                        }
+                    }
+                } catch (e) {}
+
+                trackData.clips.push(clipData);
+            }
+
+            snapshot.tracks.push(trackData);
+        }
+
+        return safeResult(snapshot);
     } catch (e) {
-        // Keyframe adjustment failed
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Compare two sequence snapshots and return differences
+ * Used to learn what manual edits the user made vs what AI produced
+ */
+function compareSequenceSnapshots(seqName1, seqName2) {
+    try {
+        var snap1Result = safeParse(snapshotSequenceProperties(seqName1));
+        var snap2Result = safeParse(snapshotSequenceProperties(seqName2));
+
+        if (!snap1Result.success || !snap2Result.success) {
+            return errorResult('Could not snapshot both sequences');
+        }
+
+        var snap1 = snap1Result.data;
+        var snap2 = snap2Result.data;
+
+        var diffs = {
+            seq1: seqName1,
+            seq2: seqName2,
+            frameSizeDiff: (snap1.width !== snap2.width || snap1.height !== snap2.height),
+            trackDiffs: []
+        };
+
+        var maxTracks = Math.max(snap1.tracks.length, snap2.tracks.length);
+        for (var t = 0; t < maxTracks; t++) {
+            var t1 = snap1.tracks[t];
+            var t2 = snap2.tracks[t];
+
+            if (!t1 || !t2) {
+                diffs.trackDiffs.push({
+                    track: t,
+                    diff: 'track_missing',
+                    in: t1 ? seqName1 : seqName2
+                });
+                continue;
+            }
+
+            var maxClips = Math.max(t1.clips.length, t2.clips.length);
+            for (var c = 0; c < maxClips; c++) {
+                var c1 = t1.clips[c];
+                var c2 = t2.clips[c];
+
+                if (!c1 || !c2) {
+                    diffs.trackDiffs.push({
+                        track: t,
+                        clip: c,
+                        diff: 'clip_missing',
+                        in: c1 ? seqName1 : seqName2
+                    });
+                    continue;
+                }
+
+                // Compare Motion properties
+                for (var key in c1.motion) {
+                    if (c2.motion[key]) {
+                        var v1 = jsonStringify(c1.motion[key].value);
+                        var v2 = jsonStringify(c2.motion[key].value);
+                        if (v1 !== v2) {
+                            diffs.trackDiffs.push({
+                                track: t,
+                                clip: c,
+                                clipName: c1.name,
+                                property: 'Motion.' + key,
+                                seq1Value: c1.motion[key].value,
+                                seq2Value: c2.motion[key].value
+                            });
+                        }
+                    }
+                }
+
+                // Compare MOGRT properties
+                for (var mkey in c1.mogrt) {
+                    if (c2.mogrt[mkey]) {
+                        var mv1 = jsonStringify(c1.mogrt[mkey]);
+                        var mv2 = jsonStringify(c2.mogrt[mkey]);
+                        if (mv1 !== mv2) {
+                            diffs.trackDiffs.push({
+                                track: t,
+                                clip: c,
+                                clipName: c1.name,
+                                property: 'MOGRT.' + mkey,
+                                seq1Value: c1.mogrt[mkey],
+                                seq2Value: c2.mogrt[mkey]
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        diffs.totalDifferences = diffs.trackDiffs.length;
+        return safeResult(diffs);
+    } catch (e) {
+        return errorResult(e.toString());
     }
 }
 

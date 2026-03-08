@@ -1,7 +1,11 @@
 /**
- * Module 7: Version Creator - One-Click Multi-Version Automation
- * Creates 1080x1080 (square) and 1080x1920 (portrait) versions from main sequence,
- * auto-adjusts clip motion properties, and organizes into "All Render" bin.
+ * Module 7: Version Creator - Smart Multi-Version Automation
+ * Creates versions (1080x1080, 1080x1920, etc.) from main sequence with:
+ * - Per-track role detection (background, narration, overlay, text, lower-third)
+ * - MOGRT/Essential Graphics text position adjustment
+ * - Crop, Drop Shadow, and position-based effect adjustment
+ * - Smart center-pin for narration clips, bottom-pin for lower thirds
+ * - Bin comparison/learning system to diff manual vs AI edits
  */
 
 var VersionCreator = (function () {
@@ -18,6 +22,15 @@ var VersionCreator = (function () {
         'none': 'None (keep original scale/position)'
     };
 
+    var TRACK_ROLE_LABELS = {
+        'background': 'Background (V1 base footage)',
+        'narration': 'Narration / Face (center-pin)',
+        'overlay': 'Overlay / Logo (preserve corner)',
+        'text': 'Text / Graphics (fit + adjust MOGRT)',
+        'lower_third': 'Lower Third (pin to bottom)',
+        'unknown': 'Auto-detect'
+    };
+
     /**
      * Get saved version configurations or defaults
      */
@@ -25,9 +38,6 @@ var VersionCreator = (function () {
         return Storage.get('versionConfigs', DEFAULT_VERSIONS);
     }
 
-    /**
-     * Save custom version configurations
-     */
     function saveVersionConfigs(configs) {
         Storage.set('versionConfigs', configs);
     }
@@ -40,13 +50,14 @@ var VersionCreator = (function () {
             binName: 'All Render',
             createSubBin: true,
             autoAdjust: true,
-            fitMode: 'fill'
+            fitMode: 'fill',
+            smartRoles: true,
+            adjustMOGRT: true,
+            adjustEffects: true,
+            trackOverrides: {}
         });
     }
 
-    /**
-     * Save settings
-     */
     function saveSettings(settings) {
         Storage.set('versionCreatorSettings', settings);
     }
@@ -63,24 +74,36 @@ var VersionCreator = (function () {
             binName: (options && options.binName) || settings.binName,
             createSubBin: options && typeof options.createSubBin !== 'undefined' ? options.createSubBin : settings.createSubBin,
             autoAdjust: options && typeof options.autoAdjust !== 'undefined' ? options.autoAdjust : settings.autoAdjust,
-            fitMode: (options && options.fitMode) || settings.fitMode
+            fitMode: (options && options.fitMode) || settings.fitMode,
+            smartRoles: options && typeof options.smartRoles !== 'undefined' ? options.smartRoles : settings.smartRoles,
+            adjustMOGRT: options && typeof options.adjustMOGRT !== 'undefined' ? options.adjustMOGRT : settings.adjustMOGRT,
+            adjustEffects: options && typeof options.adjustEffects !== 'undefined' ? options.adjustEffects : settings.adjustEffects,
+            trackOverrides: (options && options.trackOverrides) || settings.trackOverrides || {}
         };
 
         return PPro.callAsync('createVersionsFromActive', JSON.stringify(config));
     }
 
-    /**
-     * Get active sequence info
-     */
     function getActiveSequenceInfo() {
         return PPro.callAsync('getActiveSequenceInfo', null);
     }
 
-    /**
-     * Scan the All Render bin
-     */
     function scanAllRenderBin(binName) {
         return PPro.callMultiAsync('scanBinContents', [binName || 'All Render']);
+    }
+
+    /**
+     * Snapshot a sequence's properties for comparison
+     */
+    function snapshotSequence(seqName) {
+        return PPro.callMultiAsync('snapshotSequenceProperties', [seqName]);
+    }
+
+    /**
+     * Compare two sequences and get property differences
+     */
+    function compareSequences(seqName1, seqName2) {
+        return PPro.callMultiAsync('compareSequenceSnapshots', [seqName1, seqName2]);
     }
 
     /**
@@ -92,7 +115,7 @@ var VersionCreator = (function () {
 
         var html = '<div class="module-section">';
         html += '<h3>Version Creator</h3>';
-        html += '<p class="module-desc">One-click: create square &amp; portrait versions from your main sequence, auto-adjust clips, organize into bin.</p>';
+        html += '<p class="module-desc">Smart multi-version automation with track role detection, MOGRT adjustment, and learning from your manual edits.</p>';
 
         // Active sequence info
         html += '<div class="version-seq-info" id="version-seq-info">';
@@ -103,14 +126,14 @@ var VersionCreator = (function () {
         html += '<h4>Versions to Create</h4>';
         html += '<div class="version-list" id="version-list">';
         for (var i = 0; i < versions.length; i++) {
-            var v = versions[i];
-            html += renderVersionRow(v, i);
+            html += renderVersionRow(versions[i], i);
         }
         html += '</div>';
         html += '<button class="btn btn-sm btn-secondary" id="btn-add-version">+ Add Version</button>';
 
-        // Settings
-        html += '<h4>Settings</h4>';
+        // Smart Settings
+        html += '<h4>Smart Settings</h4>';
+
         html += '<div class="form-row">';
         html += '<label>Target Bin</label>';
         html += '<input type="text" id="vc-bin-name" value="' + (settings.binName || 'All Render') + '" placeholder="All Render">';
@@ -131,12 +154,41 @@ var VersionCreator = (function () {
         html += '</div>';
 
         html += '<div class="form-row">';
-        html += '<label>Fit Mode</label>';
+        html += '<label>Global Fit Mode (fallback)</label>';
         html += '<select id="vc-fit-mode">';
         for (var mode in FIT_MODES) {
             html += '<option value="' + mode + '"' + (settings.fitMode === mode ? ' selected' : '') + '>' + FIT_MODES[mode] + '</option>';
         }
         html += '</select>';
+        html += '</div>';
+
+        // Smart role toggles
+        html += '<div class="form-row">';
+        html += '<label class="checkbox-label">';
+        html += '<input type="checkbox" id="vc-smart-roles" ' + (settings.smartRoles !== false ? 'checked' : '') + '>';
+        html += ' Smart Track Roles (auto-detect background/narration/text/overlay)';
+        html += '</label>';
+        html += '</div>';
+
+        html += '<div class="form-row">';
+        html += '<label class="checkbox-label">';
+        html += '<input type="checkbox" id="vc-adjust-mogrt" ' + (settings.adjustMOGRT !== false ? 'checked' : '') + '>';
+        html += ' Adjust MOGRT / Essential Graphics positions';
+        html += '</label>';
+        html += '</div>';
+
+        html += '<div class="form-row">';
+        html += '<label class="checkbox-label">';
+        html += '<input type="checkbox" id="vc-adjust-effects" ' + (settings.adjustEffects !== false ? 'checked' : '') + '>';
+        html += ' Adjust Effects (Crop, Drop Shadow, etc.)';
+        html += '</label>';
+        html += '</div>';
+
+        // Track role overrides
+        html += '<h4>Track Role Overrides <small>(optional)</small></h4>';
+        html += '<p class="module-desc">Override auto-detected roles for specific tracks. Leave as "Auto-detect" to use smart detection.</p>';
+        html += '<div id="track-role-overrides">';
+        html += '<p class="empty-state">Load sequence to see tracks...</p>';
         html += '</div>';
 
         // Main action button
@@ -146,6 +198,20 @@ var VersionCreator = (function () {
 
         // Progress / log
         html += '<div id="version-log" class="log-area" style="display:none;"></div>';
+
+        // Bin Comparison / Learning
+        html += '<h4>Bin Comparison (Learn from Manual Edits)</h4>';
+        html += '<p class="module-desc">Compare your manually edited version with the AI version to see exactly what differs.</p>';
+        html += '<div class="form-row">';
+        html += '<label>Manual Sequence Name</label>';
+        html += '<input type="text" id="vc-compare-manual" placeholder="e.g., 1st SelfNarration">';
+        html += '</div>';
+        html += '<div class="form-row">';
+        html += '<label>AI Sequence Name</label>';
+        html += '<input type="text" id="vc-compare-ai" placeholder="e.g., 1st SelfNarration AI">';
+        html += '</div>';
+        html += '<button class="btn btn-sm btn-secondary" id="btn-compare-bins">Compare & Learn</button>';
+        html += '<div id="compare-results" style="display:none;"></div>';
 
         // All Render bin explorer
         html += '<h4>All Render Bin</h4>';
@@ -157,8 +223,9 @@ var VersionCreator = (function () {
         html += '</div>';
         container.innerHTML = html;
 
-        // Load active sequence info
+        // Load active sequence info + track roles
         loadSequenceInfo();
+        loadTrackRoleOverrides(container, settings);
 
         // Bind events
         bindVersionEvents(container);
@@ -201,6 +268,31 @@ var VersionCreator = (function () {
         });
     }
 
+    function loadTrackRoleOverrides(container, settings) {
+        getActiveSequenceInfo().then(function (result) {
+            var area = container.querySelector('#track-role-overrides');
+            if (!area || !result || !result.success) return;
+
+            var d = result.data;
+            var overrides = settings.trackOverrides || {};
+            var html = '';
+
+            for (var t = 0; t < d.videoTrackCount; t++) {
+                var currentRole = overrides[String(t)] || 'unknown';
+                html += '<div class="form-row track-role-row">';
+                html += '<label>V' + (t + 1) + '</label>';
+                html += '<select class="track-role-select" data-track="' + t + '">';
+                for (var role in TRACK_ROLE_LABELS) {
+                    html += '<option value="' + role + '"' + (currentRole === role ? ' selected' : '') + '>' + TRACK_ROLE_LABELS[role] + '</option>';
+                }
+                html += '</select>';
+                html += '</div>';
+            }
+
+            area.innerHTML = html || '<p class="empty-state">No video tracks found</p>';
+        }).catch(function () {});
+    }
+
     function bindVersionEvents(container) {
 
         // Create All Versions - main button
@@ -209,12 +301,27 @@ var VersionCreator = (function () {
             btn.disabled = true;
             btn.textContent = 'Creating versions...';
 
+            // Collect track role overrides
+            var trackOverrides = {};
+            var roleSelects = container.querySelectorAll('.track-role-select');
+            for (var rs = 0; rs < roleSelects.length; rs++) {
+                var tIdx = roleSelects[rs].getAttribute('data-track');
+                var tRole = roleSelects[rs].value;
+                if (tRole !== 'unknown') {
+                    trackOverrides[tIdx] = tRole;
+                }
+            }
+
             // Save current settings
             var currentSettings = {
                 binName: container.querySelector('#vc-bin-name').value || 'All Render',
                 createSubBin: container.querySelector('#vc-create-subbin').checked,
                 autoAdjust: container.querySelector('#vc-auto-adjust').checked,
-                fitMode: container.querySelector('#vc-fit-mode').value
+                fitMode: container.querySelector('#vc-fit-mode').value,
+                smartRoles: container.querySelector('#vc-smart-roles').checked,
+                adjustMOGRT: container.querySelector('#vc-adjust-mogrt').checked,
+                adjustEffects: container.querySelector('#vc-adjust-effects').checked,
+                trackOverrides: trackOverrides
             };
             saveSettings(currentSettings);
 
@@ -232,10 +339,17 @@ var VersionCreator = (function () {
             var logArea = container.querySelector('#version-log');
             logArea.style.display = 'block';
             logArea.innerHTML = '';
-            versionLog(logArea, 'Starting version creation...');
+            versionLog(logArea, 'Starting smart version creation...');
             versionLog(logArea, 'Versions: ' + versions.map(function (v) { return v.width + 'x' + v.height; }).join(', '));
             versionLog(logArea, 'Fit mode: ' + currentSettings.fitMode);
-            versionLog(logArea, 'Auto-adjust: ' + (currentSettings.autoAdjust ? 'Yes' : 'No'));
+            versionLog(logArea, 'Smart roles: ' + (currentSettings.smartRoles ? 'ON' : 'OFF'));
+            versionLog(logArea, 'MOGRT adjust: ' + (currentSettings.adjustMOGRT ? 'ON' : 'OFF'));
+            versionLog(logArea, 'Effects adjust: ' + (currentSettings.adjustEffects ? 'ON' : 'OFF'));
+
+            var overrideCount = Object.keys(trackOverrides).length;
+            if (overrideCount > 0) {
+                versionLog(logArea, 'Track role overrides: ' + overrideCount + ' tracks');
+            }
 
             createAllVersions(currentSettings).then(function (result) {
                 btn.disabled = false;
@@ -244,6 +358,13 @@ var VersionCreator = (function () {
                 if (result && result.success) {
                     var d = result.data;
                     versionLog(logArea, 'Main sequence: ' + d.mainSequence.name + ' (' + d.mainSequence.width + 'x' + d.mainSequence.height + ')');
+
+                    if (d.trackRoles && d.trackRoles.length) {
+                        versionLog(logArea, 'Detected track roles:');
+                        for (var r = 0; r < d.trackRoles.length; r++) {
+                            versionLog(logArea, '  V' + (r + 1) + ': ' + d.trackRoles[r]);
+                        }
+                    }
 
                     for (var i = 0; i < d.versions.length; i++) {
                         versionLog(logArea, 'Created: ' + d.versions[i].name + ' (' + d.versions[i].width + 'x' + d.versions[i].height + ')');
@@ -256,9 +377,7 @@ var VersionCreator = (function () {
                     versionLog(logArea, 'All versions created successfully!');
                     showNotification('Versions created! Check "' + currentSettings.binName + '" bin.', 'success');
 
-                    // Refresh bin contents
                     loadBinContents(container, currentSettings.binName);
-                    // Refresh sequence info
                     loadSequenceInfo();
                 } else {
                     versionLog(logArea, 'Error: ' + (result ? result.error : 'Unknown error'));
@@ -289,7 +408,6 @@ var VersionCreator = (function () {
             });
             saveVersionConfigs(versions);
 
-            // Re-render the version list
             var listEl = container.querySelector('#version-list');
             var html = '';
             for (var i = 0; i < versions.length; i++) {
@@ -307,6 +425,66 @@ var VersionCreator = (function () {
             var binName = container.querySelector('#vc-bin-name').value || 'All Render';
             loadBinContents(container, binName);
         });
+
+        // Compare bins button
+        container.querySelector('#btn-compare-bins').addEventListener('click', function () {
+            var manualName = container.querySelector('#vc-compare-manual').value;
+            var aiName = container.querySelector('#vc-compare-ai').value;
+
+            if (!manualName || !aiName) {
+                showNotification('Enter both sequence names to compare', 'error');
+                return;
+            }
+
+            var resultsArea = container.querySelector('#compare-results');
+            resultsArea.style.display = 'block';
+            resultsArea.innerHTML = '<p class="empty-state">Comparing sequences...</p>';
+
+            compareSequences(manualName, aiName).then(function (result) {
+                if (!result || !result.success) {
+                    resultsArea.innerHTML = '<p class="empty-state">Error: ' + (result ? result.error : 'Unknown') + '</p>';
+                    return;
+                }
+
+                var d = result.data;
+                var html = '<div class="compare-summary">';
+                html += '<strong>Differences Found: ' + d.totalDifferences + '</strong>';
+                html += '</div>';
+
+                if (d.totalDifferences === 0) {
+                    html += '<p class="empty-state">No differences found - sequences match!</p>';
+                } else {
+                    html += '<div class="compare-diffs">';
+                    for (var di = 0; di < d.trackDiffs.length; di++) {
+                        var diff = d.trackDiffs[di];
+                        html += '<div class="diff-row">';
+
+                        if (diff.diff === 'track_missing') {
+                            html += '<span class="diff-label">Track V' + (diff.track + 1) + '</span>';
+                            html += '<span class="diff-type">Missing in ' + diff.in + '</span>';
+                        } else if (diff.diff === 'clip_missing') {
+                            html += '<span class="diff-label">V' + (diff.track + 1) + ' Clip ' + diff.clip + '</span>';
+                            html += '<span class="diff-type">Missing in ' + diff.in + '</span>';
+                        } else {
+                            html += '<span class="diff-label">V' + (diff.track + 1) + ' "' + (diff.clipName || '') + '"</span>';
+                            html += '<span class="diff-prop">' + diff.property + '</span>';
+                            html += '<div class="diff-values">';
+                            html += '<span class="diff-val-manual">Manual: ' + JSON.stringify(diff.seq1Value) + '</span>';
+                            html += '<span class="diff-val-ai">AI: ' + JSON.stringify(diff.seq2Value) + '</span>';
+                            html += '</div>';
+                        }
+
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                    html += '<p class="module-desc">Use these differences to set track role overrides above, or adjust your smart settings.</p>';
+                }
+
+                resultsArea.innerHTML = html;
+            }).catch(function (err) {
+                resultsArea.innerHTML = '<p class="empty-state">Error: ' + err + '</p>';
+            });
+        });
     }
 
     function bindRemoveButtons(container) {
@@ -318,7 +496,6 @@ var VersionCreator = (function () {
                 versions.splice(idx, 1);
                 saveVersionConfigs(versions);
 
-                // Re-render
                 var listEl = container.querySelector('#version-list');
                 var html = '';
                 for (var j = 0; j < versions.length; j++) {
@@ -388,6 +565,8 @@ var VersionCreator = (function () {
         createAllVersions: createAllVersions,
         getActiveSequenceInfo: getActiveSequenceInfo,
         scanAllRenderBin: scanAllRenderBin,
+        snapshotSequence: snapshotSequence,
+        compareSequences: compareSequences,
         renderUI: renderUI
     };
 
