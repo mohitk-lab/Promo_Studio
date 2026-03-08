@@ -48,8 +48,8 @@
             </MinSize>
           </Geometry>
           <Icons>
-            <Icon Type="Normal">./assets/icons/icon-light.png</Icon>
-            <Icon Type="RollOver">./assets/icons/icon-dark.png</Icon>
+            <Icon Type="Normal">./assets/icons/icon-light.svg</Icon>
+            <Icon Type="RollOver">./assets/icons/icon-dark.svg</Icon>
           </Icons>
         </UI>
       </DispatchInfo>

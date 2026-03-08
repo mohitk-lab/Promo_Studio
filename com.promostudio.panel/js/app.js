@@ -20,9 +20,19 @@
      * Initialize the application
      */
     function init() {
+        // Initialize global error handler
+        ErrorHandler.initGlobalHandler();
+        ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Promo Studio initialized');
+
         renderOverview();
         bindNavigation();
         checkTriggeredRules();
+
+        // Auto-attach browse buttons after any tab renders
+        var observer = new MutationObserver(function () {
+            FilePicker.autoAttachBrowseButtons();
+        });
+        observer.observe(document.querySelector('.tab-content'), { childList: true, subtree: true });
     }
 
     /**

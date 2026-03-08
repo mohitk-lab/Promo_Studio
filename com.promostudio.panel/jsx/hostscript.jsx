@@ -45,6 +45,121 @@ function errorResult(msg) {
     return jsonStringify({ success: false, error: String(msg) });
 }
 
+/**
+ * Safe JSON parse for incoming args (avoids eval where possible)
+ */
+function safeParse(str) {
+    if (typeof str !== 'string') return str;
+    try {
+        if (typeof JSON !== 'undefined') return JSON.parse(str);
+        return eval('(' + str + ')');
+    } catch (e) {
+        return str;
+    }
+}
+
+/**
+ * Validate that a file exists on disk
+ */
+function fileExistsJSX(filePath) {
+    try {
+        var f = new File(filePath);
+        return safeResult({ exists: f.exists, path: filePath });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Validate that a folder exists on disk
+ */
+function folderExistsJSX(folderPath) {
+    try {
+        var f = new Folder(folderPath);
+        return safeResult({ exists: f.exists, path: folderPath });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Create folder if it doesn't exist
+ */
+function ensureFolder(folderPath) {
+    try {
+        var f = new Folder(folderPath);
+        if (!f.exists) {
+            var created = f.create();
+            return safeResult({ created: created, path: folderPath });
+        }
+        return safeResult({ created: false, exists: true, path: folderPath });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Launch Adobe Media Encoder
+ */
+function launchEncoder() {
+    try {
+        if (app.encoder) {
+            app.encoder.launchEncoder();
+            return safeResult({ launched: true });
+        }
+        return errorResult('Adobe Media Encoder not available');
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Get system info for diagnostics
+ */
+function getSystemInfo() {
+    try {
+        return safeResult({
+            appName: app.name || 'Premiere Pro',
+            appVersion: app.version || 'unknown',
+            buildNumber: app.build || 'unknown',
+            os: $.os || 'unknown',
+            engineName: $.engineName || 'ExtendScript',
+            locale: $.locale || 'unknown',
+            encoderAvailable: !!app.encoder,
+            projectOpen: !!app.project
+        });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Scan a folder for files by extension
+ */
+function scanFolderForFiles(folderPath, extension) {
+    try {
+        var f = new Folder(folderPath);
+        if (!f.exists) return errorResult('Folder not found: ' + folderPath);
+
+        var pattern = extension ? ('*.' + extension) : '*.*';
+        var files = f.getFiles(pattern);
+        var result = [];
+        for (var i = 0; i < files.length; i++) {
+            if (files[i] instanceof File) {
+                result.push({
+                    name: files[i].name,
+                    path: files[i].fsName,
+                    size: files[i].length,
+                    modified: files[i].modified ? files[i].modified.toString() : ''
+                });
+            }
+        }
+        return safeResult(result);
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
 
 // ============================================================
 // PROJECT INFO
