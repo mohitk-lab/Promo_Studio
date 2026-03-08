@@ -7,6 +7,30 @@
     'use strict';
 
     var currentTab = 'overview';
+
+    /**
+     * Force-reload the JSX hostscript from disk so changes take effect
+     * without restarting Premiere Pro
+     */
+    function reloadJSX() {
+        try {
+            var extPath = csInterface.getSystemPath(SystemPath.EXTENSION);
+            var jsxPath = extPath + '/jsx/hostscript.jsx';
+            // Normalize path separators for ExtendScript
+            jsxPath = jsxPath.replace(/\\/g, '/');
+            var script = '$.evalFile("' + jsxPath + '")';
+            csInterface.evalScript(script, function (result) {
+                if (result === 'EvalScript error.' || result === 'undefined') {
+                    console.error('[App] JSX reload failed: ' + result + ' | Path: ' + jsxPath);
+                } else {
+                    console.log('[App] JSX hostscript reloaded from disk');
+                }
+            });
+        } catch (e) {
+            console.error('[App] JSX reload error: ' + e.message);
+        }
+    }
+
     var modules = {
         templates: TemplateGenerator,
         export: MultiExport,
@@ -24,6 +48,9 @@
         // Initialize global error handler
         ErrorHandler.initGlobalHandler();
         ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Promo Studio initialized');
+
+        // Force-reload JSX hostscript from disk (avoids PPro restart when JSX changes)
+        reloadJSX();
 
         // Initialize PPro event listeners
         PPro.initEventListeners();

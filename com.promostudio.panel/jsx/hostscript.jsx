@@ -2065,7 +2065,7 @@ function compareSequenceSnapshots(seqName1, seqName2) {
                 diffs.trackDiffs.push({
                     track: t,
                     diff: 'track_missing',
-                    in: t1 ? seqName1 : seqName2
+                    presentIn: t1 ? seqName1 : seqName2
                 });
                 continue;
             }
@@ -2080,7 +2080,7 @@ function compareSequenceSnapshots(seqName1, seqName2) {
                         track: t,
                         clip: c,
                         diff: 'clip_missing',
-                        in: c1 ? seqName1 : seqName2
+                        presentIn: c1 ? seqName1 : seqName2
                     });
                     continue;
                 }
