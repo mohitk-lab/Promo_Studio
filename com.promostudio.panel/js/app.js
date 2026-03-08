@@ -201,8 +201,19 @@
         var icon = document.getElementById('theme-icon');
         if (!toggle) return;
 
-        // Load saved preference
+        // Auto-detect PPro theme via host environment brightness
         var saved = Storage.get('theme');
+        if (!saved) {
+            // Default to dark since PPro is typically dark-themed
+            try {
+                var hostEnv = csInterface.getHostEnvironment();
+                var bgColor = hostEnv.appSkinInfo.panelBackgroundColor.color;
+                var brightness = (bgColor.red + bgColor.green + bgColor.blue) / 3;
+                saved = brightness < 128 ? 'dark' : 'light';
+            } catch (e) {
+                saved = 'dark';
+            }
+        }
         if (saved === 'dark') {
             document.documentElement.setAttribute('data-theme', 'dark');
             toggle.checked = true;

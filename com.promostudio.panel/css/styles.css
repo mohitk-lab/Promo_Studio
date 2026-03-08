@@ -84,71 +84,71 @@
     --toggle-knob-on: linear-gradient(145deg, #fff, #f0ead9);
 }
 
-/* ===== DARK THEME ===== */
+/* ===== DARK THEME - Premiere Pro Native Match ===== */
 [data-theme="dark"] {
-    --bg-primary: #2b2536;
-    --bg-secondary: #231e2e;
-    --bg-tertiary: #342e42;
-    --bg-card: #3a3348;
-    --bg-hover: #443d54;
-    --bg-input: #2e2840;
-    --bg-raised: #413a52;
+    --bg-primary: #232323;
+    --bg-secondary: #1e1e1e;
+    --bg-tertiary: #2a2a2a;
+    --bg-card: #303030;
+    --bg-hover: #383838;
+    --bg-input: #1a1a1a;
+    --bg-raised: #353535;
 
-    --clay-surface: #3f3852;
-    --clay-light: #4a4260;
-    --clay-deep: #322c42;
-    --clay-glow: rgba(160, 140, 220, 0.08);
+    --clay-surface: #2d2d2d;
+    --clay-light: #333333;
+    --clay-deep: #252525;
+    --clay-glow: rgba(255, 255, 255, 0.03);
 
-    --text-primary: #e8e2f0;
-    --text-secondary: #a89cc0;
-    --text-muted: #7a6e94;
+    --text-primary: #e0e0e0;
+    --text-secondary: #999999;
+    --text-muted: #666666;
 
-    --accent-blue: #7b9ef8;
-    --accent-blue-hover: #92b4ff;
-    --accent-blue-soft: rgba(123, 158, 248, 0.15);
-    --accent-green: #7dd4a0;
-    --accent-green-soft: rgba(125, 212, 160, 0.15);
-    --accent-red: #f08080;
-    --accent-red-soft: rgba(240, 128, 128, 0.15);
-    --accent-orange: #f0b86e;
-    --accent-orange-soft: rgba(240, 184, 110, 0.15);
-    --accent-purple: #b88ef0;
-    --accent-purple-soft: rgba(184, 142, 240, 0.15);
-    --accent-pink: #e890c0;
+    --accent-blue: #5b9bf5;
+    --accent-blue-hover: #72adf7;
+    --accent-blue-soft: rgba(91, 155, 245, 0.12);
+    --accent-green: #5ec490;
+    --accent-green-soft: rgba(94, 196, 144, 0.12);
+    --accent-red: #e06666;
+    --accent-red-soft: rgba(224, 102, 102, 0.12);
+    --accent-orange: #e0a84e;
+    --accent-orange-soft: rgba(224, 168, 78, 0.12);
+    --accent-purple: #9580e0;
+    --accent-purple-soft: rgba(149, 128, 224, 0.12);
+    --accent-pink: #d080b0;
 
     --clay-shadow-out:
-        8px 8px 16px rgba(0, 0, 0, 0.35),
-        -4px -4px 12px rgba(100, 80, 140, 0.08);
+        4px 4px 10px rgba(0, 0, 0, 0.4),
+        -2px -2px 6px rgba(255, 255, 255, 0.02);
     --clay-shadow-out-sm:
-        4px 4px 10px rgba(0, 0, 0, 0.3),
-        -2px -2px 8px rgba(100, 80, 140, 0.06);
+        2px 2px 6px rgba(0, 0, 0, 0.35),
+        -1px -1px 4px rgba(255, 255, 255, 0.02);
     --clay-shadow-in:
-        inset 2px 2px 5px rgba(0, 0, 0, 0.25),
-        inset -2px -2px 5px rgba(140, 120, 180, 0.05);
+        inset 2px 2px 4px rgba(0, 0, 0, 0.3),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.02);
     --clay-shadow-in-deep:
-        inset 3px 3px 8px rgba(0, 0, 0, 0.35),
-        inset -2px -2px 6px rgba(140, 120, 180, 0.06);
+        inset 2px 2px 6px rgba(0, 0, 0, 0.4),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.02);
     --clay-shadow-btn:
-        4px 4px 10px rgba(0, 0, 0, 0.3),
-        -2px -2px 6px rgba(100, 80, 140, 0.06),
-        inset 0 1px 1px rgba(255, 255, 255, 0.08);
+        2px 2px 6px rgba(0, 0, 0, 0.35),
+        -1px -1px 4px rgba(255, 255, 255, 0.02),
+        inset 0 1px 1px rgba(255, 255, 255, 0.05);
     --clay-shadow-btn-pressed:
-        inset 3px 3px 8px rgba(0, 0, 0, 0.35),
-        inset -1px -1px 4px rgba(140, 120, 180, 0.05);
+        inset 2px 2px 6px rgba(0, 0, 0, 0.4),
+        inset -1px -1px 3px rgba(255, 255, 255, 0.02);
 
-    --header-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    --app-gradient: linear-gradient(160deg, #2b2536 0%, #2a2238 50%, #231e2e 100%);
+    --header-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --app-gradient: linear-gradient(160deg, #232323 0%, #222222 50%, #1e1e1e 100%);
     --active-tab-shadow:
-        4px 4px 12px rgba(123, 158, 248, 0.2),
-        -2px -2px 8px rgba(184, 142, 240, 0.1),
-        inset 0 1px 2px rgba(255, 255, 255, 0.15);
-    --scrollbar-color: #3f3852;
-    --scrollbar-hover: #4a4260;
-    --divider-color: rgba(100, 80, 140, 0.08);
-    --notification-shadow: 8px 8px 20px rgba(0, 0, 0, 0.4), -4px -4px 12px rgba(100, 80, 140, 0.08);
-    --focus-ring: rgba(123, 158, 248, 0.3);
-    --toggle-knob-off: linear-gradient(145deg, #888, #666);
-    --toggle-knob-on: linear-gradient(145deg, #fff, #eee);
+        2px 2px 8px rgba(91, 155, 245, 0.15),
+        -1px -1px 4px rgba(149, 128, 224, 0.08),
+        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    --scrollbar-color: #3a3a3a;
+    --scrollbar-hover: #4a4a4a;
+    --divider-color: rgba(255, 255, 255, 0.06);
+    --notification-shadow: 4px 4px 12px rgba(0, 0, 0, 0.5), -2px -2px 6px rgba(255, 255, 255, 0.02);
+    --focus-ring: rgba(91, 155, 245, 0.3);
+    --toggle-knob-off: linear-gradient(145deg, #777, #555);
+    --toggle-knob-on: linear-gradient(145deg, #fff, #ddd);
 }
 
 * {
@@ -414,9 +414,9 @@ body {
 
 [data-theme="dark"] .btn-primary:hover {
     box-shadow:
-        6px 6px 14px rgba(0, 0, 0, 0.35),
-        -3px -3px 10px rgba(100, 80, 140, 0.08),
-        0 0 20px rgba(123, 158, 248, 0.18);
+        4px 4px 10px rgba(0, 0, 0, 0.4),
+        -2px -2px 6px rgba(255, 255, 255, 0.02),
+        0 0 16px rgba(91, 155, 245, 0.15);
 }
 
 .btn-primary:active {
@@ -619,8 +619,8 @@ select {
 
 [data-theme="dark"] .template-card:hover {
     box-shadow:
-        10px 10px 20px rgba(0, 0, 0, 0.4),
-        -5px -5px 15px rgba(100, 80, 140, 0.1);
+        6px 6px 14px rgba(0, 0, 0, 0.45),
+        -3px -3px 8px rgba(255, 255, 255, 0.02);
 }
 
 .template-card:hover::before {
