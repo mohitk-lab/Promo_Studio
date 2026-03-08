@@ -1189,6 +1189,428 @@ function tagAsset(itemIndex, tagName, tagValue) {
     }
 }
 
+// ============================================================
+// 7. VERSION CREATOR - One-Click Multi-Version Automation
+// ============================================================
+
+/**
+ * Create multiple size versions from the active sequence.
+ * Clones the sequence for each version, adjusts frame size,
+ * auto-adjusts clip motion (scale/position), and organizes into a bin.
+ *
+ * configJSON = {
+ *   versions: [ { suffix: '1080x1080', width: 1080, height: 1080 }, ... ],
+ *   binName: 'All Render',
+ *   createSubBin: true,
+ *   autoAdjust: true,
+ *   fitMode: 'fill'  // 'fill' | 'fit' | 'none'
+ * }
+ */
+function createVersionsFromActive(configJSON) {
+    try {
+        var config = safeParse(configJSON);
+        var proj = getProject();
+        if (!proj) return errorResult('No project open');
+
+        var mainSeq = proj.activeSequence;
+        if (!mainSeq) return errorResult('No active sequence - open a sequence first');
+
+        var mainName = mainSeq.name;
+        var mainID = mainSeq.sequenceID;
+        var oldWidth = parseInt(mainSeq.frameSizeHorizontal);
+        var oldHeight = parseInt(mainSeq.frameSizeVertical);
+
+        var versions = config.versions || [
+            { suffix: '1080x1080', width: 1080, height: 1080 },
+            { suffix: '1080x1920', width: 1080, height: 1920 }
+        ];
+
+        var createdVersions = [];
+
+        for (var v = 0; v < versions.length; v++) {
+            var ver = versions[v];
+            var newW = parseInt(ver.width);
+            var newH = parseInt(ver.height);
+
+            // Switch back to the main sequence before each clone
+            proj.openSequence(mainID);
+
+            // Clone the active (main) sequence
+            proj.activeSequence.clone();
+
+            // The clone is now active
+            var clone = proj.activeSequence;
+            clone.name = mainName + '_' + ver.suffix;
+
+            // Change frame size
+            var settings = clone.getSettings();
+            if (settings) {
+                settings.videoFrameWidth = newW;
+                settings.videoFrameHeight = newH;
+                clone.setSettings(settings);
+            }
+
+            // Auto-adjust clip motion properties (position, scale)
+            if (config.autoAdjust !== false) {
+                var fitMode = config.fitMode || 'fill';
+                adjustAllClipMotion(clone, oldWidth, oldHeight, newW, newH, fitMode);
+            }
+
+            createdVersions.push({
+                name: clone.name,
+                id: clone.sequenceID,
+                width: newW,
+                height: newH
+            });
+        }
+
+        // Switch back to the main sequence
+        proj.openSequence(mainID);
+
+        // Organize into bin
+        var binResult = null;
+        if (config.binName) {
+            binResult = organizeVersionsIntoBin(
+                proj, mainName, mainID, createdVersions,
+                config.binName, config.createSubBin !== false
+            );
+        }
+
+        return safeResult({
+            mainSequence: { name: mainName, width: oldWidth, height: oldHeight },
+            versions: createdVersions,
+            bin: binResult
+        });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Adjust motion (position, scale) on all video track clips
+ * when sequence frame size changes.
+ */
+function adjustAllClipMotion(seq, oldW, oldH, newW, newH, fitMode) {
+    var scaleX = newW / oldW;
+    var scaleY = newH / oldH;
+
+    // fill = cover the frame (no black bars), fit = show everything (may have bars)
+    var scaleFactor;
+    if (fitMode === 'fill') {
+        scaleFactor = Math.max(scaleX, scaleY);
+    } else if (fitMode === 'fit') {
+        scaleFactor = Math.min(scaleX, scaleY);
+    } else {
+        scaleFactor = 1; // none - don't adjust scale
+    }
+
+    for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+        var track = seq.videoTracks[t];
+        for (var c = 0; c < track.clips.numItems; c++) {
+            try {
+                adjustSingleClipMotion(track.clips[c], scaleX, scaleY, scaleFactor);
+            } catch (e) {
+                // Skip clips that can't be adjusted (e.g., adjustment layers)
+            }
+        }
+    }
+}
+
+/**
+ * Adjust a single clip's Motion component properties.
+ * Handles both static values and keyframed properties.
+ */
+function adjustSingleClipMotion(clip, scaleX, scaleY, scaleFactor) {
+    if (!clip || !clip.components) return;
+
+    for (var i = 0; i < clip.components.numItems; i++) {
+        var comp = clip.components[i];
+        if (comp.displayName !== 'Motion') continue;
+
+        for (var p = 0; p < comp.properties.numItems; p++) {
+            var prop = comp.properties[p];
+
+            if (prop.displayName === 'Position') {
+                adjustPositionProperty(prop, scaleX, scaleY);
+            }
+
+            if (prop.displayName === 'Scale') {
+                adjustScaleProperty(prop, scaleFactor);
+            }
+        }
+        break; // Only one Motion component per clip
+    }
+}
+
+/**
+ * Adjust Position property - remap X/Y proportionally to new frame
+ */
+function adjustPositionProperty(prop, scaleX, scaleY) {
+    try {
+        if (prop.isTimeVarying()) {
+            // Keyframed position - adjust each keyframe
+            adjustKeyframedPosition(prop, scaleX, scaleY);
+        } else {
+            var pos = prop.getValue();
+            if (pos && pos.length >= 2) {
+                prop.setValue([pos[0] * scaleX, pos[1] * scaleY], true);
+            }
+        }
+    } catch (e) {
+        // Silently skip if property can't be adjusted
+    }
+}
+
+/**
+ * Adjust Scale property - multiply by fill/fit factor
+ */
+function adjustScaleProperty(prop, scaleFactor) {
+    try {
+        if (prop.isTimeVarying()) {
+            adjustKeyframedScale(prop, scaleFactor);
+        } else {
+            var scale = prop.getValue();
+            prop.setValue(scale * scaleFactor, true);
+        }
+    } catch (e) {
+        // Silently skip
+    }
+}
+
+/**
+ * Adjust keyframed Position values.
+ * Iterates through the sequence timeline and adjusts keyframe values.
+ */
+function adjustKeyframedPosition(prop, scaleX, scaleY) {
+    try {
+        // Use findNearestKey to walk through keyframes
+        // Start from time 0, find nearest key, adjust, move forward
+        var startTime = new Time();
+        startTime.seconds = 0;
+
+        // Get the first key
+        var key = prop.findNearestKey(startTime, 0);
+        var processedTimes = [];
+        var maxIterations = 500; // Safety limit
+
+        while (key && maxIterations > 0) {
+            maxIterations--;
+            var keyTimeStr = key.seconds.toString();
+
+            // Avoid processing same key twice
+            var alreadyDone = false;
+            for (var i = 0; i < processedTimes.length; i++) {
+                if (processedTimes[i] === keyTimeStr) { alreadyDone = true; break; }
+            }
+            if (alreadyDone) break;
+            processedTimes.push(keyTimeStr);
+
+            var val = prop.getValueAtKey(key);
+            if (val && val.length >= 2) {
+                prop.setValueAtKey(key, [val[0] * scaleX, val[1] * scaleY], true);
+            }
+
+            // Move slightly past current key to find next
+            var nextTime = new Time();
+            nextTime.seconds = key.seconds + 0.001;
+            var nextKey = prop.findNearestKey(nextTime, 0);
+
+            // If we got the same key back, we're done
+            if (!nextKey || nextKey.seconds <= key.seconds) break;
+            key = nextKey;
+        }
+    } catch (e) {
+        // Keyframe adjustment failed - user can adjust manually
+    }
+}
+
+/**
+ * Adjust keyframed Scale values.
+ */
+function adjustKeyframedScale(prop, scaleFactor) {
+    try {
+        var startTime = new Time();
+        startTime.seconds = 0;
+
+        var key = prop.findNearestKey(startTime, 0);
+        var processedTimes = [];
+        var maxIterations = 500;
+
+        while (key && maxIterations > 0) {
+            maxIterations--;
+            var keyTimeStr = key.seconds.toString();
+
+            var alreadyDone = false;
+            for (var i = 0; i < processedTimes.length; i++) {
+                if (processedTimes[i] === keyTimeStr) { alreadyDone = true; break; }
+            }
+            if (alreadyDone) break;
+            processedTimes.push(keyTimeStr);
+
+            var val = prop.getValueAtKey(key);
+            prop.setValueAtKey(key, val * scaleFactor, true);
+
+            var nextTime = new Time();
+            nextTime.seconds = key.seconds + 0.001;
+            var nextKey = prop.findNearestKey(nextTime, 0);
+
+            if (!nextKey || nextKey.seconds <= key.seconds) break;
+            key = nextKey;
+        }
+    } catch (e) {
+        // Keyframe adjustment failed
+    }
+}
+
+/**
+ * Find or create a bin by name at the project root level
+ */
+function findOrCreateBinByName(proj, binName) {
+    // Search root items for existing bin
+    for (var i = 0; i < proj.rootItem.children.numItems; i++) {
+        var item = proj.rootItem.children[i];
+        if (item.name === binName && item.type === 2) {
+            return item;
+        }
+    }
+    // Create new bin
+    return proj.rootItem.createBin(binName);
+}
+
+/**
+ * Find or create a sub-bin within a parent bin
+ */
+function findOrCreateSubBin(parentBin, subBinName) {
+    for (var i = 0; i < parentBin.children.numItems; i++) {
+        var item = parentBin.children[i];
+        if (item.name === subBinName && item.type === 2) {
+            return item;
+        }
+    }
+    return parentBin.createBin(subBinName);
+}
+
+/**
+ * Find a project item (sequence) by name at root level
+ */
+function findRootItemByName(proj, name) {
+    for (var i = 0; i < proj.rootItem.children.numItems; i++) {
+        if (proj.rootItem.children[i].name === name) {
+            return proj.rootItem.children[i];
+        }
+    }
+    return null;
+}
+
+/**
+ * Organize the main sequence and its versions into a bin folder.
+ * Creates "All Render / PromoName /" structure.
+ */
+function organizeVersionsIntoBin(proj, mainName, mainID, versions, binName, createSubBin) {
+    var parentBin = findOrCreateBinByName(proj, binName);
+
+    var targetBin = parentBin;
+    if (createSubBin) {
+        targetBin = findOrCreateSubBin(parentBin, mainName);
+    }
+
+    // Move main sequence
+    var mainItem = findRootItemByName(proj, mainName);
+    if (mainItem) {
+        try { mainItem.moveBin(targetBin); } catch (e) {}
+    }
+
+    // Move version sequences
+    for (var i = 0; i < versions.length; i++) {
+        var verItem = findRootItemByName(proj, versions[i].name);
+        if (verItem) {
+            try { verItem.moveBin(targetBin); } catch (e) {}
+        }
+    }
+
+    return {
+        bin: binName,
+        subBin: createSubBin ? mainName : null,
+        movedCount: versions.length + 1
+    };
+}
+
+/**
+ * Get active sequence info for the Version Creator UI
+ */
+function getActiveSequenceInfo() {
+    try {
+        var proj = getProject();
+        if (!proj) return errorResult('No project open');
+
+        var seq = proj.activeSequence;
+        if (!seq) return errorResult('No active sequence');
+
+        return safeResult({
+            name: seq.name,
+            width: parseInt(seq.frameSizeHorizontal),
+            height: parseInt(seq.frameSizeVertical),
+            duration: seq.end ? (parseFloat(seq.end) - parseFloat(seq.zeroPoint)) : 0,
+            videoTrackCount: seq.videoTracks.numTracks,
+            audioTrackCount: seq.audioTracks.numTracks,
+            id: seq.sequenceID
+        });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Scan the "All Render" bin (or any bin) and return its contents
+ */
+function scanBinContents(binName) {
+    try {
+        var proj = getProject();
+        if (!proj) return errorResult('No project open');
+
+        var targetBin = null;
+        for (var i = 0; i < proj.rootItem.children.numItems; i++) {
+            var item = proj.rootItem.children[i];
+            if (item.name === binName && item.type === 2) {
+                targetBin = item;
+                break;
+            }
+        }
+
+        if (!targetBin) return safeResult({ exists: false, items: [] });
+
+        var items = [];
+        scanBinRecursive(targetBin, '', items);
+
+        return safeResult({ exists: true, name: binName, items: items });
+    } catch (e) {
+        return errorResult(e.toString());
+    }
+}
+
+/**
+ * Recursively scan bin contents
+ */
+function scanBinRecursive(bin, path, items) {
+    for (var i = 0; i < bin.children.numItems; i++) {
+        var item = bin.children[i];
+        var itemPath = path ? (path + '/' + item.name) : item.name;
+
+        items.push({
+            name: item.name,
+            path: itemPath,
+            type: item.type, // 1=clip/seq, 2=bin
+            isBin: item.type === 2,
+            childCount: item.type === 2 ? item.children.numItems : 0
+        });
+
+        if (item.type === 2) {
+            scanBinRecursive(item, itemPath, items);
+        }
+    }
+}
+
+
 /**
  * Get metadata for a project item
  */

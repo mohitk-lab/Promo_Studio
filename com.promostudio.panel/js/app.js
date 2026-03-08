@@ -13,7 +13,8 @@
         scheduler: CampaignScheduler,
         brandkit: BrandKit,
         rules: RulesEngine,
-        assets: AssetLibrary
+        assets: AssetLibrary,
+        versions: VersionCreator
     };
 
     /**
@@ -111,6 +112,9 @@
             case 'assets':
                 modules.assets.renderUI(container);
                 break;
+            case 'versions':
+                modules.versions.renderUI(container);
+                break;
         }
     }
 
@@ -153,6 +157,7 @@
         html += '<button class="btn btn-secondary" onclick="switchTab(\'export\')">Export</button>';
         html += '<button class="btn btn-secondary" onclick="switchTab(\'scheduler\')">Schedule</button>';
         html += '<button class="btn btn-secondary" onclick="switchTab(\'assets\')">Assets</button>';
+        html += '<button class="btn btn-secondary" onclick="switchTab(\'versions\')">Create Versions</button>';
         html += '</div>';
 
         // Project info
