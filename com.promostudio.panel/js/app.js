@@ -24,6 +24,9 @@
         ErrorHandler.initGlobalHandler();
         ErrorHandler.log(ErrorHandler.SEVERITY.INFO, 'App', 'Promo Studio initialized');
 
+        // Initialize dark mode toggle
+        initThemeToggle();
+
         renderOverview();
         bindNavigation();
         checkTriggeredRules();
@@ -171,6 +174,35 @@
         if (triggered.length > 0) {
             showNotification(triggered.length + ' promo rule(s) ready to execute today!', 'info');
         }
+    }
+
+    /**
+     * Dark mode toggle
+     */
+    function initThemeToggle() {
+        var toggle = document.getElementById('theme-switch');
+        var icon = document.getElementById('theme-icon');
+        if (!toggle) return;
+
+        // Load saved preference
+        var saved = Storage.get('theme');
+        if (saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            toggle.checked = true;
+            if (icon) icon.innerHTML = '&#9790;';
+        }
+
+        toggle.addEventListener('change', function () {
+            if (this.checked) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                Storage.set('theme', 'dark');
+                if (icon) icon.innerHTML = '&#9790;';
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+                Storage.set('theme', 'light');
+                if (icon) icon.innerHTML = '&#9788;';
+            }
+        });
     }
 
     // Expose switchTab globally for inline onclick handlers

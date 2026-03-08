@@ -1,12 +1,91 @@
 /* ============================================
    Promo Studio - Premiere Pro Extension
    CLAYMORPHISM DESIGN SYSTEM
+   Creamy White (Light) + Dark Mode Toggle
    Soft 3D clay look with puffy inflated elements,
    inner shadows, rounded shapes, pastel accents
    ============================================ */
 
 :root {
-    /* Base palette - warm dark clay */
+    /* ===== LIGHT THEME (Creamy White) - DEFAULT ===== */
+    --bg-primary: #f5f0e8;
+    --bg-secondary: #ede6da;
+    --bg-tertiary: #faf6ef;
+    --bg-card: #ffffff;
+    --bg-hover: #f0ead9;
+    --bg-input: #ebe5d6;
+    --bg-raised: #fff9f0;
+
+    /* Clay surface colors */
+    --clay-surface: #f2ecdf;
+    --clay-light: #faf5ec;
+    --clay-deep: #e6dfd0;
+    --clay-glow: rgba(180, 160, 120, 0.08);
+
+    /* Text */
+    --text-primary: #3a3226;
+    --text-secondary: #7a7060;
+    --text-muted: #a89c88;
+
+    /* Accents - warm pastel clay tones */
+    --accent-blue: #6b8fd4;
+    --accent-blue-hover: #829ee0;
+    --accent-blue-soft: rgba(107, 143, 212, 0.12);
+    --accent-green: #68b88a;
+    --accent-green-soft: rgba(104, 184, 138, 0.12);
+    --accent-red: #d47272;
+    --accent-red-soft: rgba(212, 114, 114, 0.12);
+    --accent-orange: #d4a04e;
+    --accent-orange-soft: rgba(212, 160, 78, 0.12);
+    --accent-purple: #9a7cc8;
+    --accent-purple-soft: rgba(154, 124, 200, 0.12);
+    --accent-pink: #c87ea8;
+
+    /* Clay morphism values */
+    --radius: 16px;
+    --radius-sm: 12px;
+    --radius-lg: 20px;
+    --radius-pill: 50px;
+
+    /* Clay shadows - light theme */
+    --clay-shadow-out:
+        6px 6px 14px rgba(160, 145, 120, 0.25),
+        -4px -4px 10px rgba(255, 255, 255, 0.7);
+    --clay-shadow-out-sm:
+        4px 4px 8px rgba(160, 145, 120, 0.2),
+        -2px -2px 6px rgba(255, 255, 255, 0.6);
+    --clay-shadow-in:
+        inset 2px 2px 5px rgba(160, 145, 120, 0.2),
+        inset -2px -2px 5px rgba(255, 255, 255, 0.5);
+    --clay-shadow-in-deep:
+        inset 3px 3px 7px rgba(160, 145, 120, 0.25),
+        inset -2px -2px 5px rgba(255, 255, 255, 0.5);
+    --clay-shadow-btn:
+        4px 4px 8px rgba(160, 145, 120, 0.25),
+        -2px -2px 6px rgba(255, 255, 255, 0.6),
+        inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    --clay-shadow-btn-pressed:
+        inset 3px 3px 7px rgba(160, 145, 120, 0.25),
+        inset -1px -1px 4px rgba(255, 255, 255, 0.4);
+
+    /* Header gradient for both modes */
+    --header-shadow: 0 4px 12px rgba(160, 145, 120, 0.2);
+    --app-gradient: linear-gradient(160deg, #f5f0e8 0%, #ede6da 50%, #faf6ef 100%);
+    --active-tab-shadow:
+        4px 4px 10px rgba(107, 143, 212, 0.2),
+        -2px -2px 6px rgba(154, 124, 200, 0.1),
+        inset 0 1px 2px rgba(255, 255, 255, 0.2);
+    --scrollbar-color: #d4cdc0;
+    --scrollbar-hover: #c4bcae;
+    --divider-color: rgba(160, 145, 120, 0.12);
+    --notification-shadow: 6px 6px 16px rgba(160, 145, 120, 0.3), -3px -3px 10px rgba(255, 255, 255, 0.5);
+    --focus-ring: rgba(107, 143, 212, 0.35);
+    --toggle-knob-off: linear-gradient(145deg, #c4bcae, #a89c88);
+    --toggle-knob-on: linear-gradient(145deg, #fff, #f0ead9);
+}
+
+/* ===== DARK THEME ===== */
+[data-theme="dark"] {
     --bg-primary: #2b2536;
     --bg-secondary: #231e2e;
     --bg-tertiary: #342e42;
@@ -15,18 +94,15 @@
     --bg-input: #2e2840;
     --bg-raised: #413a52;
 
-    /* Clay surface colors */
     --clay-surface: #3f3852;
     --clay-light: #4a4260;
     --clay-deep: #322c42;
     --clay-glow: rgba(160, 140, 220, 0.08);
 
-    /* Text */
     --text-primary: #e8e2f0;
     --text-secondary: #a89cc0;
     --text-muted: #7a6e94;
 
-    /* Accents - soft pastel clay tones */
     --accent-blue: #7b9ef8;
     --accent-blue-hover: #92b4ff;
     --accent-blue-soft: rgba(123, 158, 248, 0.15);
@@ -40,13 +116,6 @@
     --accent-purple-soft: rgba(184, 142, 240, 0.15);
     --accent-pink: #e890c0;
 
-    /* Clay morphism values */
-    --radius: 16px;
-    --radius-sm: 12px;
-    --radius-lg: 20px;
-    --radius-pill: 50px;
-
-    /* Clay shadows - the key to claymorphism */
     --clay-shadow-out:
         8px 8px 16px rgba(0, 0, 0, 0.35),
         -4px -4px 12px rgba(100, 80, 140, 0.08);
@@ -66,6 +135,20 @@
     --clay-shadow-btn-pressed:
         inset 3px 3px 8px rgba(0, 0, 0, 0.35),
         inset -1px -1px 4px rgba(140, 120, 180, 0.05);
+
+    --header-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --app-gradient: linear-gradient(160deg, #2b2536 0%, #2a2238 50%, #231e2e 100%);
+    --active-tab-shadow:
+        4px 4px 12px rgba(123, 158, 248, 0.2),
+        -2px -2px 8px rgba(184, 142, 240, 0.1),
+        inset 0 1px 2px rgba(255, 255, 255, 0.15);
+    --scrollbar-color: #3f3852;
+    --scrollbar-hover: #4a4260;
+    --divider-color: rgba(100, 80, 140, 0.08);
+    --notification-shadow: 8px 8px 20px rgba(0, 0, 0, 0.4), -4px -4px 12px rgba(100, 80, 140, 0.08);
+    --focus-ring: rgba(123, 158, 248, 0.3);
+    --toggle-knob-off: linear-gradient(145deg, #888, #666);
+    --toggle-knob-on: linear-gradient(145deg, #fff, #eee);
 }
 
 * {
@@ -81,6 +164,7 @@ body {
     color: var(--text-primary);
     background: var(--bg-primary);
     overflow-x: hidden;
+    transition: background 0.4s ease, color 0.4s ease;
 }
 
 /* ============================================
@@ -91,7 +175,8 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: linear-gradient(160deg, var(--bg-primary) 0%, #2a2238 50%, var(--bg-secondary) 100%);
+    background: var(--app-gradient);
+    transition: background 0.4s ease;
 }
 
 .app-header {
@@ -101,9 +186,16 @@ body {
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--header-shadow);
     position: relative;
     z-index: 10;
+    transition: background 0.4s ease, box-shadow 0.4s ease;
+}
+
+.app-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .app-header h1 {
@@ -123,6 +215,74 @@ body {
     padding: 2px 10px;
     border-radius: var(--radius-pill);
     box-shadow: var(--clay-shadow-in);
+    transition: background 0.4s ease, color 0.4s ease;
+}
+
+/* ============================================
+   DARK MODE TOGGLE - Clay Switch
+   ============================================ */
+
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-toggle-label {
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    line-height: 1;
+}
+
+.theme-toggle-label:hover {
+    transform: scale(1.15);
+}
+
+.theme-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+}
+
+.theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--clay-deep);
+    border-radius: 22px;
+    transition: all 0.4s ease;
+    box-shadow: var(--clay-shadow-in);
+}
+
+.theme-switch-slider:before {
+    content: '';
+    position: absolute;
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background: linear-gradient(145deg, #f5f0e8, #ede6da);
+    border-radius: 50%;
+    transition: all 0.4s ease;
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.theme-switch input:checked + .theme-switch-slider {
+    background: linear-gradient(145deg, #3f3852, #4a4260);
+}
+
+.theme-switch input:checked + .theme-switch-slider:before {
+    transform: translateX(18px);
+    background: linear-gradient(145deg, #e8e2f0, #d8d0e8);
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* ============================================
@@ -136,6 +296,7 @@ body {
     overflow-x: auto;
     flex-shrink: 0;
     gap: 4px;
+    transition: background 0.4s ease;
 }
 
 .nav-tab {
@@ -161,10 +322,7 @@ body {
 .nav-tab.active {
     color: #ffffff;
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-    box-shadow:
-        4px 4px 12px rgba(123, 158, 248, 0.2),
-        -2px -2px 8px rgba(184, 142, 240, 0.1),
-        inset 0 1px 2px rgba(255, 255, 255, 0.15);
+    box-shadow: var(--active-tab-shadow);
     transform: translateY(-1px);
 }
 
@@ -238,16 +396,23 @@ body {
 }
 
 .btn-primary {
-    background: linear-gradient(145deg, var(--accent-blue), #6488e0);
+    background: linear-gradient(145deg, var(--accent-blue), #5a7dc0);
     color: #ffffff;
     box-shadow:
         var(--clay-shadow-btn),
-        0 0 16px rgba(123, 158, 248, 0.12);
+        0 0 16px rgba(107, 143, 212, 0.1);
 }
 
 .btn-primary:hover {
     background: linear-gradient(145deg, var(--accent-blue-hover), var(--accent-blue));
     transform: translateY(-2px);
+    box-shadow:
+        6px 6px 14px rgba(160, 145, 120, 0.3),
+        -3px -3px 10px rgba(255, 255, 255, 0.5),
+        0 0 20px rgba(107, 143, 212, 0.15);
+}
+
+[data-theme="dark"] .btn-primary:hover {
     box-shadow:
         6px 6px 14px rgba(0, 0, 0, 0.35),
         -3px -3px 10px rgba(100, 80, 140, 0.08),
@@ -268,9 +433,6 @@ body {
 .btn-secondary:hover {
     background: linear-gradient(145deg, var(--bg-hover), var(--clay-light));
     transform: translateY(-2px);
-    box-shadow:
-        6px 6px 14px rgba(0, 0, 0, 0.35),
-        -3px -3px 10px rgba(100, 80, 140, 0.08);
 }
 
 .btn-secondary:active {
@@ -279,7 +441,7 @@ body {
 }
 
 .btn-danger {
-    background: linear-gradient(145deg, var(--accent-red), #d06868);
+    background: linear-gradient(145deg, var(--accent-red), #c06060);
     color: #ffffff;
     box-shadow: var(--clay-shadow-btn);
 }
@@ -287,8 +449,8 @@ body {
 .btn-danger:hover {
     transform: translateY(-2px);
     box-shadow:
-        6px 6px 14px rgba(0, 0, 0, 0.35),
-        0 0 16px rgba(240, 128, 128, 0.15);
+        6px 6px 14px rgba(160, 145, 120, 0.3),
+        0 0 16px rgba(212, 114, 114, 0.15);
 }
 
 .btn-danger:active {
@@ -380,7 +542,7 @@ select:focus,
 textarea:focus {
     box-shadow:
         var(--clay-shadow-in-deep),
-        0 0 0 2px rgba(123, 158, 248, 0.3);
+        0 0 0 2px var(--focus-ring);
 }
 
 input[type="color"] {
@@ -404,10 +566,14 @@ select {
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23a89cc0' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%237a7060' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
     padding-right: 28px;
+}
+
+[data-theme="dark"] select {
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23a89cc0' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 /* ============================================
@@ -439,13 +605,19 @@ select {
     left: 0;
     right: 0;
     height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(123, 158, 248, 0.3), transparent);
+    background: linear-gradient(90deg, transparent, rgba(107, 143, 212, 0.3), transparent);
     opacity: 0;
     transition: opacity 0.3s;
 }
 
 .template-card:hover {
     transform: translateY(-3px);
+    box-shadow:
+        10px 10px 20px rgba(160, 145, 120, 0.3),
+        -5px -5px 15px rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] .template-card:hover {
     box-shadow:
         10px 10px 20px rgba(0, 0, 0, 0.4),
         -5px -5px 15px rgba(100, 80, 140, 0.1);
@@ -531,9 +703,6 @@ select {
 
 .platform-card:hover {
     transform: translateY(-2px);
-    box-shadow:
-        8px 8px 18px rgba(0, 0, 0, 0.38),
-        -4px -4px 12px rgba(100, 80, 140, 0.08);
 }
 
 .platform-check {
@@ -654,14 +823,14 @@ select {
 }
 
 .cal-today {
-    background: linear-gradient(145deg, rgba(123, 158, 248, 0.25), rgba(184, 142, 240, 0.15));
+    background: linear-gradient(145deg, rgba(107, 143, 212, 0.2), rgba(154, 124, 200, 0.12));
     box-shadow:
         var(--clay-shadow-out-sm),
-        0 0 12px rgba(123, 158, 248, 0.15);
+        0 0 12px rgba(107, 143, 212, 0.12);
 }
 
 .cal-has-campaign {
-    background: linear-gradient(145deg, rgba(125, 212, 160, 0.2), rgba(123, 158, 248, 0.15));
+    background: linear-gradient(145deg, rgba(104, 184, 138, 0.18), rgba(107, 143, 212, 0.12));
 }
 
 .cal-day-num {
@@ -683,7 +852,7 @@ select {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* ============================================
@@ -717,8 +886,6 @@ select {
 
 .campaign-item:hover {
     transform: translateY(-2px);
-    box-shadow: var(--clay-shadow-out),
-        0 0 12px rgba(123, 158, 248, 0.05);
 }
 
 .campaign-info {
@@ -816,7 +983,7 @@ select {
     margin-bottom: 4px;
     box-shadow:
         var(--clay-shadow-out-sm),
-        inset 0 1px 2px rgba(255, 255, 255, 0.1);
+        inset 0 1px 2px rgba(255, 255, 255, 0.15);
     transition: transform 0.25s ease;
 }
 
@@ -904,7 +1071,7 @@ select {
 .rule-triggered {
     box-shadow:
         var(--clay-shadow-out),
-        0 0 16px rgba(125, 212, 160, 0.15);
+        0 0 16px rgba(104, 184, 138, 0.15);
 }
 
 .rule-triggered::before {
@@ -986,22 +1153,22 @@ select {
     width: 14px;
     left: 2px;
     bottom: 2px;
-    background: linear-gradient(145deg, #888, #666);
+    background: var(--toggle-knob-off);
     border-radius: 50%;
     transition: 0.3s;
-    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .toggle-switch input:checked + .toggle-slider {
     background: linear-gradient(145deg, var(--accent-blue), var(--accent-purple));
     box-shadow:
         var(--clay-shadow-in),
-        0 0 8px rgba(123, 158, 248, 0.2);
+        0 0 8px rgba(107, 143, 212, 0.2);
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
     transform: translateX(14px);
-    background: linear-gradient(145deg, #fff, #eee);
+    background: var(--toggle-knob-on);
 }
 
 /* Badges - Clay pills */
@@ -1016,7 +1183,7 @@ select {
 }
 
 .badge-active {
-    background: linear-gradient(135deg, var(--accent-green), #60c080);
+    background: linear-gradient(135deg, var(--accent-green), #58a878);
     color: #fff;
 }
 
@@ -1033,7 +1200,7 @@ select {
 }
 
 .alert-info {
-    background: linear-gradient(145deg, rgba(123, 158, 248, 0.15), rgba(184, 142, 240, 0.1));
+    background: linear-gradient(145deg, rgba(107, 143, 212, 0.12), rgba(154, 124, 200, 0.08));
     color: var(--accent-blue);
 }
 
@@ -1083,13 +1250,10 @@ select {
     background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
     color: #fff;
     transform: translateY(-2px);
-    box-shadow:
-        var(--clay-shadow-out-sm),
-        0 0 10px rgba(123, 158, 248, 0.15);
 }
 
 .tag-clear {
-    background: linear-gradient(145deg, var(--accent-red), #d06868);
+    background: linear-gradient(145deg, var(--accent-red), #c06060);
     color: #fff;
 }
 
@@ -1136,19 +1300,19 @@ select {
 }
 
 .asset-type-video {
-    background: linear-gradient(135deg, rgba(123, 158, 248, 0.3), rgba(123, 158, 248, 0.15));
+    background: linear-gradient(135deg, rgba(107, 143, 212, 0.25), rgba(107, 143, 212, 0.1));
     color: var(--accent-blue);
 }
 .asset-type-audio {
-    background: linear-gradient(135deg, rgba(184, 142, 240, 0.3), rgba(184, 142, 240, 0.15));
+    background: linear-gradient(135deg, rgba(154, 124, 200, 0.25), rgba(154, 124, 200, 0.1));
     color: var(--accent-purple);
 }
 .asset-type-image {
-    background: linear-gradient(135deg, rgba(125, 212, 160, 0.3), rgba(125, 212, 160, 0.15));
+    background: linear-gradient(135deg, rgba(104, 184, 138, 0.25), rgba(104, 184, 138, 0.1));
     color: var(--accent-green);
 }
 .asset-type-template {
-    background: linear-gradient(135deg, rgba(240, 184, 110, 0.3), rgba(240, 184, 110, 0.15));
+    background: linear-gradient(135deg, rgba(212, 160, 78, 0.25), rgba(212, 160, 78, 0.1));
     color: var(--accent-orange);
 }
 
@@ -1212,7 +1376,7 @@ select {
 .log-entry {
     color: var(--text-secondary);
     padding: 3px 0;
-    border-bottom: 1px solid rgba(100, 80, 140, 0.08);
+    border-bottom: 1px solid var(--divider-color);
 }
 
 .log-entry:last-child {
@@ -1249,9 +1413,7 @@ select {
     transform: translateY(-15px);
     transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     pointer-events: none;
-    box-shadow:
-        8px 8px 20px rgba(0, 0, 0, 0.4),
-        -4px -4px 12px rgba(100, 80, 140, 0.08);
+    box-shadow: var(--notification-shadow);
 }
 
 .notification.show {
@@ -1260,12 +1422,12 @@ select {
 }
 
 .notification.success {
-    background: linear-gradient(135deg, var(--accent-green), #60c080);
+    background: linear-gradient(135deg, var(--accent-green), #58a878);
     color: #fff;
 }
 
 .notification.error {
-    background: linear-gradient(135deg, var(--accent-red), #d06868);
+    background: linear-gradient(135deg, var(--accent-red), #c06060);
     color: #fff;
 }
 
@@ -1297,9 +1459,6 @@ select {
 
 .overview-card:hover {
     transform: translateY(-3px);
-    box-shadow:
-        10px 10px 20px rgba(0, 0, 0, 0.4),
-        -5px -5px 15px rgba(100, 80, 140, 0.1);
 }
 
 .overview-card .stat-value {
@@ -1345,13 +1504,13 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--clay-surface);
+    background: var(--scrollbar-color);
     border-radius: 3px;
-    box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--clay-light);
+    background: var(--scrollbar-hover);
 }
 
 /* ============================================
@@ -1377,7 +1536,7 @@ select {
     padding: 6px 12px;
     font-size: 10px;
     border-radius: 10px;
-    background: linear-gradient(145deg, var(--accent-purple), #9070d0);
+    background: linear-gradient(145deg, var(--accent-purple), #8668b8);
     color: #fff;
     box-shadow: var(--clay-shadow-out-sm);
     margin-left: 4px;
@@ -1385,9 +1544,6 @@ select {
 
 .btn-browse:hover {
     transform: translateY(-1px);
-    box-shadow:
-        var(--clay-shadow-out-sm),
-        0 0 10px rgba(184, 142, 240, 0.2);
 }
 
 .btn-browse:active {
@@ -1437,7 +1593,7 @@ input[data-browse] {
     justify-content: space-between;
     padding: 4px 0;
     font-size: 10px;
-    border-bottom: 1px solid rgba(100, 80, 140, 0.08);
+    border-bottom: 1px solid var(--divider-color);
 }
 
 .system-info-row:last-child {
@@ -1478,7 +1634,7 @@ input[data-browse] {
     width: 32px;
     height: 32px;
     border-radius: 8px;
-    background: linear-gradient(135deg, rgba(240, 184, 110, 0.3), rgba(240, 184, 110, 0.15));
+    background: linear-gradient(135deg, rgba(212, 160, 78, 0.25), rgba(212, 160, 78, 0.1));
     display: flex;
     align-items: center;
     justify-content: center;
